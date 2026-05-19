@@ -1,0 +1,4 @@
+packages/
+samples/NetFrameworkAI.Samples/bin/
+src/NetFrameworkAI/bin/
+tests/NetFrameworkAI.Tests/bin/
