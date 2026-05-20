@@ -55,21 +55,14 @@ Dependencies (restored via NuGet):
 ### 1. Basic Chat (OpenAI)
 
 ```csharp
+using NetFrameworkAISDK.Common;
 using NetFrameworkAISDK.OpenAI;
 
 var client = new OpenAIClient("sk-...");
-
-var messages = new List<ChatMessage>
-{
-    new ChatMessage { Role = ChatRole.User, Content = "Hello!" }
-};
-
-var response = client.CreateChatCompletion("gpt-4", messages);
-
-if (response.IsSuccess)
-{
-    Console.WriteLine(response.Result.Choices[0].Message.Content);
-}
+var agent = new AIAgent(client, "gpt-4",
+    "You are a helpful assistant.", null);
+var result = agent.Run("Hello!");
+Console.WriteLine(result.Result);
 ```
 
 ### 2. AI Agent with Tool Calling
@@ -90,8 +83,8 @@ static string GetWeather(
 // Create AI Agent
 var client = new OpenAIClient("sk-...");
 var agent = new AIAgent(client, "gpt-4",
-    instructions: "You are a helpful assistant.",
-    tools: new[] { AIFunctionFactory.Create(
+    "You are a helpful assistant.",
+    new[] { AIFunctionFactory.Create(
         new Func<string, string>(GetWeather)) });
 
 // Run conversation — tool calls are handled automatically
@@ -113,8 +106,8 @@ using NetFrameworkAISDK.Anthropic;
 
 var client = new AnthropicClient("sk-ant-...");
 var agent = new AIAgent(client, "claude-3-sonnet-20240229",
-    instructions: "You are a helpful assistant.",
-    tools: new[] { AIFunctionFactory.Create(
+    "You are a helpful assistant.",
+    new[] { AIFunctionFactory.Create(
         new Func<string, string>(GetWeather)) });
 
 var result = agent.Run("What's the weather in Tokyo?");

@@ -1,6 +1,6 @@
+using NetFrameworkAISDK.Common;
 using NetFrameworkAISDK.OpenAI;
 using System;
-using System.Collections.Generic;
 
 namespace NetFrameworkAISDK.Samples
 {
@@ -13,9 +13,9 @@ namespace NetFrameworkAISDK.Samples
 
         public void Run()
         {
-            Console.WriteLine("\nThis sample demonstrates basic non-streaming chat with OpenAI.");
-            Console.WriteLine("----------------------------------------------------------");
-            
+            Console.WriteLine("\nThis sample demonstrates basic non-streaming chat with OpenAI AIAgent.");
+            Console.WriteLine("-------------------------------------------------------------------");
+
             var config = SampleConfig.ReadFromConsole("OpenAI", "https://api.openai.com/v1", "gpt-3.5-turbo");
             if (!config.HasValidConfig)
             {
@@ -41,24 +41,22 @@ namespace NetFrameworkAISDK.Samples
                     client = new OpenAIClient(config.ApiKey);
                 }
 
+                var agent = new AIAgent(client, config.Model,
+                    "You are a helpful assistant.", null);
+
                 Console.WriteLine("\nEnter your message (type 'exit' to quit):");
                 Console.Write("You: ");
                 string userInput = Console.ReadLine();
 
                 while (userInput != "exit")
                 {
-                    var messages = new List<ChatMessage>
-                    {
-                        new ChatMessage { Role = ChatRole.User, Content = userInput }
-                    };
-
                     Console.Write("\nAssistant: ");
-                    
-                    var response = client.CreateChatCompletion(config.Model, messages);
+
+                    var response = agent.Run(userInput);
 
                     if (response.IsSuccess)
                     {
-                        Console.WriteLine(response.Result.Choices[0].Message.Content);
+                        Console.WriteLine(response.Result);
                     }
                     else
                     {

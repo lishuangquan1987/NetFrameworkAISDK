@@ -207,34 +207,31 @@ namespace NetFrameworkAISDK.Samples
                 instructions = config.SystemPrompt + "\n\n" + catalogPrompt;
             }
 
-            Console.WriteLine("\nProgressive disclosure mode. Skills catalog in system parameter.");
-            Console.WriteLine("Note: Tool calling for Anthropic requires building ToolDefinition manually.");
-            Console.WriteLine("Enter your message (type 'exit' to quit):");
+            var tools = AgentTools.CreateDefaultTools();
+            tools.Add(SkillManager.CreateLoadSkillFunction(skills));
+
+            var agent = new Common.AIAgent(client, config.Model, instructions, tools);
+
+            Console.WriteLine("\nProgressive disclosure mode. Tools available:");
+            Console.WriteLine("  read_file, write_file, list_directory, grep, glob, load_skill");
+            Console.WriteLine("\nEnter your message (type 'exit' to quit):");
             Console.Write("You: ");
             string userInput = Console.ReadLine();
 
             while (userInput != "exit")
             {
-                var messages = new List<AnthropicMessage>
-                {
-                    new AnthropicMessage { Role = AnthropicRole.User, Content = userInput }
-                };
-
                 Console.Write("\nAssistant: ");
 
-                var response = client.CreateMessage(
-                    config.Model,
-                    messages,
-                    config.MaxTokens,
-                    string.IsNullOrEmpty(instructions) ? null : instructions,
-                    config.Temperature);
+                var response = agent.Run(userInput, onToolCall: (e) =>
+                {
+                    Console.WriteLine("\n>>> Tool: " + e.FunctionName);
+                    Console.WriteLine(">>> Args: " + e.FunctionArguments);
+                    Console.WriteLine(">>> Result: " + e.Result);
+                });
 
                 if (response.IsSuccess)
                 {
-                    if (response.Result.Content != null && response.Result.Content.Count > 0)
-                    {
-                        Console.WriteLine(response.Result.Content[0].Text);
-                    }
+                    Console.WriteLine(response.Result);
                 }
                 else
                 {

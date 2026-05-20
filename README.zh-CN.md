@@ -55,21 +55,14 @@ dotnet build src/NetFrameworkAI
 ### 1. 基本对话（OpenAI）
 
 ```csharp
+using NetFrameworkAISDK.Common;
 using NetFrameworkAISDK.OpenAI;
 
 var client = new OpenAIClient("sk-...");
-
-var messages = new List<ChatMessage>
-{
-    new ChatMessage { Role = ChatRole.User, Content = "你好！" }
-};
-
-var response = client.CreateChatCompletion("gpt-4", messages);
-
-if (response.IsSuccess)
-{
-    Console.WriteLine(response.Result.Choices[0].Message.Content);
-}
+var agent = new AIAgent(client, "gpt-4",
+    "你是一个有帮助的助手。", null);
+var result = agent.Run("你好！");
+Console.WriteLine(result.Result);
 ```
 
 ### 2. AI Agent 工具调用
@@ -90,8 +83,8 @@ static string GetWeather(
 // 创建 AI Agent
 var client = new OpenAIClient("sk-...");
 var agent = new AIAgent(client, "gpt-4",
-    instructions: "你是一个有帮助的助手。",
-    tools: new[] { AIFunctionFactory.Create(
+    "你是一个有帮助的助手。",
+    new[] { AIFunctionFactory.Create(
         new Func<string, string>(GetWeather)) });
 
 // 运行对话 — 工具调用自动处理
@@ -113,8 +106,8 @@ using NetFrameworkAISDK.Anthropic;
 
 var client = new AnthropicClient("sk-ant-...");
 var agent = new AIAgent(client, "claude-3-sonnet-20240229",
-    instructions: "你是一个有帮助的助手。",
-    tools: new[] { AIFunctionFactory.Create(
+    "你是一个有帮助的助手。",
+    new[] { AIFunctionFactory.Create(
         new Func<string, string>(GetWeather)) });
 
 var result = agent.Run("东京天气怎么样？");

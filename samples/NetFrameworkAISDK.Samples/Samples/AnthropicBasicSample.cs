@@ -1,6 +1,6 @@
 using NetFrameworkAISDK.Anthropic;
+using NetFrameworkAISDK.Common;
 using System;
-using System.Collections.Generic;
 
 namespace NetFrameworkAISDK.Samples
 {
@@ -13,10 +13,10 @@ namespace NetFrameworkAISDK.Samples
 
         public void Run()
         {
-            Console.WriteLine("\nThis sample demonstrates basic non-streaming message with Anthropic.");
-            Console.WriteLine("---------------------------------------------------------------");
-            
-            var config = SampleConfig.ReadFromConsole("Anthropic", "https://api.anthropic.com/v1", 
+            Console.WriteLine("\nThis sample demonstrates basic non-streaming chat with Anthropic AIAgent.");
+            Console.WriteLine("--------------------------------------------------------------------------");
+
+            var config = SampleConfig.ReadFromConsole("Anthropic", "https://api.anthropic.com/v1",
                 "claude-3-sonnet-20240229", 1024, null, true);
             if (!config.HasValidConfig)
             {
@@ -48,29 +48,26 @@ namespace NetFrameworkAISDK.Samples
                     client = new AnthropicClient(config.ApiKey);
                 }
 
+                string instructions = !string.IsNullOrEmpty(config.SystemPrompt) 
+                    ? config.SystemPrompt 
+                    : "You are a helpful assistant.";
+
+                var agent = new AIAgent(client, config.Model,
+                    instructions, null);
+
                 Console.WriteLine("\nEnter your message (type 'exit' to quit):");
                 Console.Write("You: ");
                 string userInput = Console.ReadLine();
 
                 while (userInput != "exit")
                 {
-                    var messages = new List<AnthropicMessage>
-                    {
-                        new AnthropicMessage { Role = AnthropicRole.User, Content = userInput }
-                    };
-
                     Console.Write("\nAssistant: ");
-                    
-                    var response = client.CreateMessage(
-                        config.Model, 
-                        messages, 
-                        config.MaxTokens, 
-                        string.IsNullOrEmpty(config.SystemPrompt) ? null : config.SystemPrompt,
-                        config.Temperature);
+
+                    var response = agent.Run(userInput);
 
                     if (response.IsSuccess)
                     {
-                        Console.WriteLine(response.Result.Content[0].Text);
+                        Console.WriteLine(response.Result);
                     }
                     else
                     {

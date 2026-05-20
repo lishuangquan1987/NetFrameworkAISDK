@@ -1,6 +1,6 @@
+using NetFrameworkAISDK.Common;
 using NetFrameworkAISDK.OpenAI;
 using System;
-using System.Collections.Generic;
 
 namespace NetFrameworkAISDK.Samples
 {
@@ -13,9 +13,9 @@ namespace NetFrameworkAISDK.Samples
 
         public void Run()
         {
-            Console.WriteLine("\nThis sample demonstrates streaming chat with OpenAI.");
-            Console.WriteLine("-----------------------------------------------------");
-            
+            Console.WriteLine("\nThis sample demonstrates streaming chat with OpenAI AIAgent.");
+            Console.WriteLine("----------------------------------------------------------");
+
             var config = SampleConfig.ReadFromConsole("OpenAI", "https://api.openai.com/v1", "gpt-3.5-turbo");
             if (!config.HasValidConfig)
             {
@@ -41,37 +41,21 @@ namespace NetFrameworkAISDK.Samples
                     client = new OpenAIClient(config.ApiKey);
                 }
 
+                var agent = new AIAgent(client, config.Model,
+                    "You are a helpful assistant.", null);
+
                 Console.WriteLine("\nEnter your message (type 'exit' to quit):");
                 Console.Write("You: ");
                 string userInput = Console.ReadLine();
 
                 while (userInput != "exit")
                 {
-                    var messages = new List<ChatMessage>
-                    {
-                        new ChatMessage { Role = ChatRole.User, Content = userInput }
-                    };
-
                     Console.Write("\nAssistant: ");
-                    
-                    client.CreateChatCompletionStream(
-                        config.Model,
-                        messages,
-                        onData: streamResponse =>
-                        {
-                            if (streamResponse.Choices != null && streamResponse.Choices.Count > 0)
-                            {
-                                var delta = streamResponse.Choices[0].Delta;
-                                if (delta != null && !string.IsNullOrEmpty(delta.Content))
-                                {
-                                    Console.Write(delta.Content);
-                                }
-                            }
-                        },
-                        onError: error =>
-                        {
-                            Console.WriteLine("\nError: " + error.Message);
-                        }
+
+                    agent.RunStreaming(
+                        userInput,
+                        onUpdate: chunk => Console.Write(chunk),
+                        onError: error => Console.WriteLine("\nError: " + error.Message)
                     );
 
                     Console.WriteLine("\n\nEnter your message (type 'exit' to quit):");
