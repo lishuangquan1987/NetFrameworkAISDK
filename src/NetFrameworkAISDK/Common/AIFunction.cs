@@ -90,8 +90,9 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         /// <param name="func">委托</param>
         /// <param name="description">函数描述</param>
+        /// <param name="name">函数名称（可选，Lambda 表达式需显式指定）</param>
         /// <returns>AI 函数</returns>
-        public static AIFunction Create(Func<string, string> func, string description)
+        public static AIFunction Create(Func<string, string> func, string description, string name = null)
         {
             var method = func.Method;
             var parameters = new Dictionary<string, object>
@@ -112,7 +113,7 @@ namespace NetFrameworkAISDK.Common
 
             return new AIFunction
             {
-                Name = method.Name,
+                Name = !string.IsNullOrEmpty(name) ? name : method.Name,
                 Description = description,
                 Parameters = parameters,
                 Execute = new Func<string, string>(argsJson =>
@@ -128,8 +129,9 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         /// <param name="func">委托</param>
         /// <param name="description">函数描述</param>
+        /// <param name="name">函数名称（可选，Lambda 表达式需显式指定）</param>
         /// <returns>AI 函数</returns>
-        public static AIFunction Create(Func<string> func, string description)
+        public static AIFunction Create(Func<string> func, string description, string name = null)
         {
             var method = func.Method;
             var parameters = new Dictionary<string, object>
@@ -141,7 +143,7 @@ namespace NetFrameworkAISDK.Common
 
             return new AIFunction
             {
-                Name = method.Name,
+                Name = !string.IsNullOrEmpty(name) ? name : method.Name,
                 Description = description,
                 Parameters = parameters,
                 Execute = new Func<string, string>(argsJson => func())

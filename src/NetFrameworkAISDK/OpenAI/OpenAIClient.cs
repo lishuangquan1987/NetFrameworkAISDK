@@ -6,28 +6,20 @@ using System.Net;
 namespace NetFrameworkAISDK.OpenAI
 {
     /// <summary>
-    /// OpenAI API client - implements IAIClient for unified agent usage
+    /// OpenAI API client
     /// </summary>
-    public class OpenAIClient : HttpClientBase, IAIClient
+    public class OpenAIClient : AIClientBase
     {
         private const string DefaultBaseUrl = "https://api.openai.com/v1";
-        private List<AIFunction> _tools;
-        private Dictionary<string, AIFunction> _toolMap;
 
-        /// <summary>
-        /// Constructor with default base URL
-        /// </summary>
-        public OpenAIClient(string apiKey) : this(apiKey, DefaultBaseUrl)
+        public OpenAIClient(string apiKey)
+            : this(apiKey, DefaultBaseUrl)
         {
         }
 
-        /// <summary>
-        /// Constructor with custom base URL
-        /// </summary>
-        public OpenAIClient(string apiKey, string baseUrl) : base(apiKey, baseUrl)
+        public OpenAIClient(string apiKey, string baseUrl)
+            : base(apiKey, baseUrl)
         {
-            _tools = new List<AIFunction>();
-            _toolMap = new Dictionary<string, AIFunction>();
         }
 
         protected override void ConfigureRequest(HttpWebRequest request)
@@ -83,25 +75,7 @@ namespace NetFrameworkAISDK.OpenAI
             PostStream("chat/completions", request, onData, onError);
         }
 
-        // ---- IAIClient implementation ----
-
-        public void ConfigureTools(IEnumerable<AIFunction> tools)
-        {
-            _tools = tools != null ? new List<AIFunction>(tools) : new List<AIFunction>();
-            _toolMap = new Dictionary<string, AIFunction>();
-            if (tools != null)
-            {
-                foreach (var t in tools)
-                {
-                    if (t != null && !string.IsNullOrEmpty(t.Name))
-                    {
-                        _toolMap[t.Name] = t;
-                    }
-                }
-            }
-        }
-
-        public ApiResponse<ConversationResponse> SendConversation(
+        public override ApiResponse<ConversationResponse> SendConversation(
             List<ConversationMessage> messages,
             ConversationOptions options)
         {
@@ -126,7 +100,7 @@ namespace NetFrameworkAISDK.OpenAI
             };
         }
 
-        public void SendConversationStreaming(
+        public override void SendConversationStreaming(
             List<ConversationMessage> messages,
             ConversationOptions options,
             Action<ConversationResponse> onChunk,
@@ -177,8 +151,6 @@ namespace NetFrameworkAISDK.OpenAI
                 toolDefs);
         }
 
-        // ---- Private helpers ----
-
         private List<ChatMessage> ConvertToOpenAiMessages(List<ConversationMessage> messages, ConversationOptions options)
         {
             var result = new List<ChatMessage>();
@@ -197,10 +169,65 @@ namespace NetFrameworkAISDK.OpenAI
                 var chatMsg = new ChatMessage
                 {
                     Role = msg.Role,
-                    Content = msg.Content,
                     Name = msg.Name,
                     ToolCallId = msg.ToolCallId
                 };
+
+                if (msg.ContentParts != null && msg.ContentParts.Count > 0)
+                {
+                    var parts = new List<ImageContentPart>();
+                    if (!string.IsNullOrEmpty(msg.Content))
+                    {
+                        parts.Add(new ImageContentPart
+                        {
+                            Type = "text",
+                            Image = new ImageDetail { Url = msg.Content }
+                        });
+                    }
+                    foreach (var cp in msg.ContentParts)
+                    {
+                        if (cp.Type == ContentType.Text)
+                        {
+                            parts.Add(new ImageContentPart
+                            {
+                                Type = "text",
+                                Image = new ImageDetail { Url = cp.Text }
+                            });
+                        }
+                        else if (cp.Type == ContentType.Image)
+                        {
+                            var imagePart = new ImageContentPart
+                            {
+                                Type = "image_url"
+                            };
+
+                            if (!string.IsNullOrEmpty(cp.ImageUrl))
+                            {
+                                imagePart.Image = new ImageDetail
+                                {
+                                    Url = cp.ImageUrl,
+                                    Detail = cp.Detail
+                                };
+                            }
+                            else if (!string.IsNullOrEmpty(cp.ImageBase64))
+                            {
+                                var mediaType = !string.IsNullOrEmpty(cp.MediaType) ? cp.MediaType : "image/png";
+                                imagePart.Image = new ImageDetail
+                                {
+                                    Url = "data:" + mediaType + ";base64," + cp.ImageBase64,
+                                    Detail = cp.Detail
+                                };
+                            }
+
+                            parts.Add(imagePart);
+                        }
+                    }
+                    chatMsg.ContentParts = parts;
+                }
+                else
+                {
+                    chatMsg.Content = msg.Content;
+                }
 
                 if (msg.ToolCalls != null && msg.ToolCalls.Count > 0)
                 {
@@ -224,40 +251,6 @@ namespace NetFrameworkAISDK.OpenAI
             }
 
             return result;
-        }
-
-        private List<ToolDefinition> BuildToolDefinitions(ConversationOptions options)
-        {
-            var allTools = new List<AIFunction>();
-            if (_tools != null)
-            {
-                allTools.AddRange(_tools);
-            }
-            if (options.Tools != null)
-            {
-                allTools.AddRange(options.Tools);
-            }
-
-            if (allTools.Count == 0)
-            {
-                return null;
-            }
-
-            var toolDefs = new List<ToolDefinition>();
-            foreach (var t in allTools)
-            {
-                if (t != null)
-                {
-                    toolDefs.Add(t.ToToolDefinition());
-                }
-            }
-
-            if (toolDefs.Count == 0)
-            {
-                return null;
-            }
-
-            return toolDefs;
         }
 
         private ConversationResponse ConvertFromOpenAiResponse(ChatCompletionResponse openAiResponse)
@@ -294,29 +287,6 @@ namespace NetFrameworkAISDK.OpenAI
             }
 
             return result;
-        }
-
-        private AIFunction FindTool(string name)
-        {
-            if (string.IsNullOrEmpty(name))
-            {
-                return null;
-            }
-            if (_toolMap.ContainsKey(name))
-            {
-                return _toolMap[name];
-            }
-            return null;
-        }
-
-        public string ExecuteTool(string functionName, string functionArgs)
-        {
-            var function = FindTool(functionName);
-            if (function != null)
-            {
-                return function.Execute(functionArgs);
-            }
-            return "Error: Tool '" + functionName + "' not found.";
         }
     }
 }

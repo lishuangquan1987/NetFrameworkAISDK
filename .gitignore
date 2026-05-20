@@ -5,3 +5,17 @@ tests/NetFrameworkAI.Tests/bin/
 samples/NetFrameworkAISDK.Samples/bin/
 tests/NetFrameworkAISDK.Tests/bin/
 src/NetFrameworkAISDK/bin/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Build output
+obj/
+
+# Tools
+nuget.exe
+
+# Reports
+code-review-report.md

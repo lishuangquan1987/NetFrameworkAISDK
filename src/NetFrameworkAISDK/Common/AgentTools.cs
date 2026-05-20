@@ -436,9 +436,10 @@ namespace NetFrameworkAISDK.Common
         {
             if (string.IsNullOrEmpty(command)) { return "Error: command is required."; }
 
-            if (command.Contains("&") || command.Contains("|") || command.Contains(";") || 
+            if (command.Contains("&") || command.Contains("|") || command.Contains(";") ||
                 command.Contains(">") || command.Contains("<") || command.Contains("^") ||
-                command.Contains("\r") || command.Contains("\n"))
+                command.Contains("\r") || command.Contains("\n") || command.Contains("`") ||
+                command.Contains("$") || command.Contains("%"))
             {
                 return "Error: Command contains unsafe characters.";
             }

@@ -7,29 +7,21 @@ using System.Net;
 namespace NetFrameworkAISDK.Anthropic
 {
     /// <summary>
-    /// Anthropic API client - implements IAIClient for unified agent usage
+    /// Anthropic API client
     /// </summary>
-    public class AnthropicClient : HttpClientBase, IAIClient
+    public class AnthropicClient : AIClientBase
     {
         private const string DefaultBaseUrl = "https://api.anthropic.com/v1";
         private const string ApiVersion = "2023-06-01";
-        private List<AIFunction> _tools;
-        private Dictionary<string, AIFunction> _toolMap;
 
-        /// <summary>
-        /// Constructor with default base URL
-        /// </summary>
-        public AnthropicClient(string apiKey) : this(apiKey, DefaultBaseUrl)
+        public AnthropicClient(string apiKey)
+            : this(apiKey, DefaultBaseUrl)
         {
         }
 
-        /// <summary>
-        /// Constructor with custom base URL
-        /// </summary>
-        public AnthropicClient(string apiKey, string baseUrl) : base(apiKey, baseUrl)
+        public AnthropicClient(string apiKey, string baseUrl)
+            : base(apiKey, baseUrl)
         {
-            _tools = new List<AIFunction>();
-            _toolMap = new Dictionary<string, AIFunction>();
         }
 
         protected override void ConfigureRequest(HttpWebRequest request)
@@ -90,25 +82,7 @@ namespace NetFrameworkAISDK.Anthropic
             PostStream("messages", request, onEvent, onError);
         }
 
-        // ---- IAIClient implementation ----
-
-        public void ConfigureTools(IEnumerable<AIFunction> tools)
-        {
-            _tools = tools != null ? new List<AIFunction>(tools) : new List<AIFunction>();
-            _toolMap = new Dictionary<string, AIFunction>();
-            if (tools != null)
-            {
-                foreach (var t in tools)
-                {
-                    if (t != null && !string.IsNullOrEmpty(t.Name))
-                    {
-                        _toolMap[t.Name] = t;
-                    }
-                }
-            }
-        }
-
-        public ApiResponse<ConversationResponse> SendConversation(
+        public override ApiResponse<ConversationResponse> SendConversation(
             List<ConversationMessage> messages,
             ConversationOptions options)
         {
@@ -135,7 +109,7 @@ namespace NetFrameworkAISDK.Anthropic
             };
         }
 
-        public void SendConversationStreaming(
+        public override void SendConversationStreaming(
             List<ConversationMessage> messages,
             ConversationOptions options,
             Action<ConversationResponse> onChunk,
@@ -145,6 +119,9 @@ namespace NetFrameworkAISDK.Anthropic
             var toolDefs = BuildToolDefinitions(options);
             int maxTokens = options.MaxTokens.HasValue ? options.MaxTokens.Value : 1024;
 
+            var contentBlockStates = new Dictionary<int, ContentBlockState>();
+            string modelName = null;
+
             CreateMessageStream(
                 options.Model,
                 anthropicMessages,
@@ -153,23 +130,98 @@ namespace NetFrameworkAISDK.Anthropic
                 {
                     var convResp = new ConversationResponse();
 
-                    if (streamEvent.Delta != null && !string.IsNullOrEmpty(streamEvent.Delta.Text))
+                    if (streamEvent.Message != null && streamEvent.Type == StreamEventType.MessageStart)
                     {
-                        convResp.Content = streamEvent.Delta.Text;
+                        modelName = streamEvent.Message.Model;
+                        convResp.Model = modelName;
                     }
 
-                    if (streamEvent.Message != null)
+                    if (streamEvent.ContentBlock != null
+                        && streamEvent.Type == StreamEventType.ContentBlockStart)
                     {
-                        convResp.Model = streamEvent.Message.Model;
+                        var block = streamEvent.ContentBlock;
+                        var index = streamEvent.Index.HasValue ? streamEvent.Index.Value : 0;
+
+                        var state = new ContentBlockState
+                        {
+                            Type = block.Type,
+                            Id = block.Id,
+                            Name = block.Name
+                        };
+                        contentBlockStates[index] = state;
+                    }
+
+                    if (streamEvent.Delta != null
+                        && streamEvent.Type == StreamEventType.ContentBlockDelta)
+                    {
+                        var index = streamEvent.Index.HasValue ? streamEvent.Index.Value : 0;
+                        ContentBlockState state;
+                        if (!contentBlockStates.TryGetValue(index, out state))
+                        {
+                            state = new ContentBlockState { Type = "text" };
+                            contentBlockStates[index] = state;
+                        }
+
+                        if (state.Type == "text" && !string.IsNullOrEmpty(streamEvent.Delta.Text))
+                        {
+                            state.TextBuilder.Append(streamEvent.Delta.Text);
+                            convResp.Content = streamEvent.Delta.Text;
+                        }
+                        else if (state.Type == "tool_use" && !string.IsNullOrEmpty(streamEvent.Delta.PartialJson))
+                        {
+                            state.TextBuilder.Append(streamEvent.Delta.PartialJson);
+                        }
+                    }
+
+                    if (streamEvent.Type == StreamEventType.ContentBlockStop)
+                    {
+                        var index = streamEvent.Index.HasValue ? streamEvent.Index.Value : 0;
+                        ContentBlockState state;
+                        if (contentBlockStates.TryGetValue(index, out state))
+                        {
+                            if (state.Type == "tool_use")
+                            {
+                                var toolCall = new ToolCallRequest
+                                {
+                                    Id = state.Id,
+                                    Type = "function",
+                                    FunctionName = state.Name,
+                                    FunctionArguments = state.TextBuilder.ToString()
+                                };
+
+                                if (convResp.ToolCalls == null)
+                                {
+                                    convResp.ToolCalls = new List<ToolCallRequest>();
+                                }
+                                convResp.ToolCalls.Add(toolCall);
+
+                                if (string.IsNullOrEmpty(convResp.Content))
+                                {
+                                    convResp.Content = null;
+                                }
+                            }
+                            else if (state.Type == "text")
+                            {
+                                convResp.Content = state.TextBuilder.ToString();
+                            }
+                        }
                     }
 
                     if (streamEvent.Type == StreamEventType.MessageDelta
-                        && streamEvent.DeltaMessage != null)
+                        && streamEvent.Delta != null)
                     {
-                        convResp.FinishReason = streamEvent.DeltaMessage.StopReason;
+                        convResp.FinishReason = streamEvent.Delta.StopReason;
                     }
 
-                    onChunk(convResp);
+                    if (streamEvent.Type == StreamEventType.MessageStop)
+                    {
+                        convResp.FinishReason = "end_turn";
+                    }
+
+                    if (convResp.Content != null || convResp.ToolCalls != null)
+                    {
+                        onChunk(convResp);
+                    }
                 }),
                 onError,
                 options.SystemPrompt,
@@ -177,7 +229,13 @@ namespace NetFrameworkAISDK.Anthropic
                 toolDefs);
         }
 
-        // ---- Private helpers ----
+        private class ContentBlockState
+        {
+            public string Type;
+            public string Id;
+            public string Name;
+            public readonly System.Text.StringBuilder TextBuilder = new System.Text.StringBuilder();
+        }
 
         private List<AnthropicMessage> ConvertToAnthropicMessages(List<ConversationMessage> messages)
         {
@@ -190,53 +248,117 @@ namespace NetFrameworkAISDK.Anthropic
                 {
                     continue;
                 }
+
                 if (role == MessageRole.Tool)
                 {
-                    role = AnthropicRole.User;
+                    var toolContent = new List<ContentBlock>();
+                    toolContent.Add(new ContentBlock
+                    {
+                        Type = "tool_result",
+                        ToolUseId = msg.ToolCallId,
+                        Content = msg.Content
+                    });
+                    result.Add(new AnthropicMessage
+                    {
+                        Role = MessageRole.User,
+                        Content = toolContent
+                    });
+                    continue;
                 }
 
-                result.Add(new AnthropicMessage
+                if (msg.ToolCalls != null && msg.ToolCalls.Count > 0)
                 {
-                    Role = role,
-                    Content = msg.Content
-                });
+                    var blocks = new List<ContentBlock>();
+                    if (!string.IsNullOrEmpty(msg.Content))
+                    {
+                        blocks.Add(new ContentBlock
+                        {
+                            Type = "text",
+                            Text = msg.Content
+                        });
+                    }
+                    foreach (var tc in msg.ToolCalls)
+                    {
+                        object input = new Dictionary<string, object>();
+                        if (!string.IsNullOrEmpty(tc.FunctionArguments))
+                        {
+                            try
+                            {
+                                input = JsonHelper.Deserialize<object>(tc.FunctionArguments);
+                            }
+                            catch
+                            {
+                                input = new Dictionary<string, object>();
+                            }
+                        }
+                        blocks.Add(new ContentBlock
+                        {
+                            Type = "tool_use",
+                            Id = tc.Id,
+                            Name = tc.FunctionName,
+                            Input = input
+                        });
+                    }
+                    result.Add(new AnthropicMessage
+                    {
+                        Role = MessageRole.Assistant,
+                        Content = blocks
+                    });
+                    continue;
+                }
+
+                if (msg.ContentParts != null && msg.ContentParts.Count > 0)
+                {
+                    var blocks = new List<ContentBlock>();
+                    if (!string.IsNullOrEmpty(msg.Content))
+                    {
+                        blocks.Add(new ContentBlock { Type = "text", Text = msg.Content });
+                    }
+                    foreach (var cp in msg.ContentParts)
+                    {
+                        if (cp.Type == ContentType.Text)
+                        {
+                            blocks.Add(new ContentBlock { Type = "text", Text = cp.Text });
+                        }
+                        else if (cp.Type == ContentType.Image)
+                        {
+                            if (!string.IsNullOrEmpty(cp.ImageUrl))
+                            {
+                                blocks.Add(new ContentBlock
+                                {
+                                    Type = "image",
+                                    Source = cp.ImageUrl,
+                                    MediaType = !string.IsNullOrEmpty(cp.MediaType) ? cp.MediaType : "image/png"
+                                });
+                            }
+                            else if (!string.IsNullOrEmpty(cp.ImageBase64))
+                            {
+                                blocks.Add(new ContentBlock
+                                {
+                                    Type = "image",
+                                    Source = cp.ImageBase64,
+                                    MediaType = !string.IsNullOrEmpty(cp.MediaType) ? cp.MediaType : "image/png"
+                                });
+                            }
+                        }
+                    }
+                    result.Add(new AnthropicMessage
+                    {
+                        Role = role,
+                        Content = blocks
+                    });
+                }
+                else
+                {
+                    result.Add(new AnthropicMessage
+                    {
+                        Role = role,
+                        Content = msg.Content
+                    });
+                }
             }
 
             return result;
-        }
-
-        private List<ToolDefinition> BuildToolDefinitions(ConversationOptions options)
-        {
-            var allTools = new List<AIFunction>();
-            if (_tools != null)
-            {
-                allTools.AddRange(_tools);
-            }
-            if (options.Tools != null)
-            {
-                allTools.AddRange(options.Tools);
-            }
-
-            if (allTools.Count == 0)
-            {
-                return null;
-            }
-
-            var toolDefs = new List<ToolDefinition>();
-            foreach (var t in allTools)
-            {
-                if (t != null)
-                {
-                    toolDefs.Add(t.ToToolDefinition());
-                }
-            }
-
-            if (toolDefs.Count == 0)
-            {
-                return null;
-            }
-
-            return toolDefs;
         }
 
         private ConversationResponse ConvertFromAnthropicResponse(MessagesResponse anthropicResponse)
@@ -281,29 +403,6 @@ namespace NetFrameworkAISDK.Anthropic
             }
 
             return result;
-        }
-
-        private AIFunction FindTool(string name)
-        {
-            if (string.IsNullOrEmpty(name))
-            {
-                return null;
-            }
-            if (_toolMap.ContainsKey(name))
-            {
-                return _toolMap[name];
-            }
-            return null;
-        }
-
-        public string ExecuteTool(string functionName, string functionArgs)
-        {
-            var function = FindTool(functionName);
-            if (function != null)
-            {
-                return function.Execute(functionArgs);
-            }
-            return "Error: Tool '" + functionName + "' not found.";
         }
     }
 }

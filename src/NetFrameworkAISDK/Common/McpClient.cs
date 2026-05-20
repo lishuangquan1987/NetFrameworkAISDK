@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace NetFrameworkAISDK.Common
 {
@@ -22,6 +24,7 @@ namespace NetFrameworkAISDK.Common
         private bool _initialized;
         private bool _disposed;
         private int _timeoutMilliseconds;
+        private readonly object _sendLock;
 
         public McpClient()
             : this(30000)
@@ -31,6 +34,7 @@ namespace NetFrameworkAISDK.Common
         public McpClient(int timeoutMilliseconds)
         {
             _timeoutMilliseconds = timeoutMilliseconds;
+            _sendLock = new object();
         }
 
         public bool IsConnected
@@ -225,46 +229,63 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
+        private string ReadLineWithTimeout(int timeoutMs)
+        {
+            string result = null;
+            var task = Task.Factory.StartNew(function: new Func<string>(() =>
+            {
+                return _stdout.ReadLine();
+            }));
+            if (task.Wait(timeoutMs))
+            {
+                result = task.Result;
+            }
+            return result;
+        }
+
         private ApiResponse<object> SendRequest(string method, object parameters)
         {
-            _requestId++;
-            var request = new Dictionary<string, object>
+            lock (_sendLock)
             {
-                { "jsonrpc", "2.0" },
-                { "id", _requestId },
-                { "method", method },
-                { "params", parameters }
-            };
+                _requestId++;
+                var request = new Dictionary<string, object>
+                {
+                    { "jsonrpc", "2.0" },
+                    { "id", _requestId },
+                    { "method", method },
+                    { "params", parameters }
+                };
 
-            string requestJson = JsonHelper.Serialize(request);
+                string requestJson = JsonHelper.Serialize(request);
 
-            lock (_stdin)
-            {
                 _stdin.WriteLine(requestJson);
                 _stdin.Flush();
-            }
 
-            string responseLine = _stdout.ReadLine();
-            if (responseLine == null)
-            {
-                return new ApiResponse<object> { Error = new ApiError("MCP server returned null response") };
-            }
-
-            var response = JsonHelper.Deserialize<McpJsonRpcResponse>(responseLine);
-            if (response == null)
-            {
-                return new ApiResponse<object> { Error = new ApiError("Failed to parse MCP response") };
-            }
-
-            if (response.Error != null)
-            {
-                return new ApiResponse<object>
+                string responseLine = ReadLineWithTimeout(_timeoutMilliseconds);
+                if (responseLine == null)
                 {
-                    Error = new ApiError(response.Error.Message ?? "MCP request error")
-                };
-            }
+                    return new ApiResponse<object>
+                    {
+                        Error = new ApiError("MCP request timed out after " + _timeoutMilliseconds + "ms")
+                    };
+                }
 
-            return new ApiResponse<object> { Result = response.Result };
+                var response = JsonHelper.Deserialize<McpJsonRpcResponse>(responseLine);
+                if (response == null)
+                {
+                    return new ApiResponse<object> { Error = new ApiError("Failed to parse MCP response") };
+                }
+
+                if (response.Error != null)
+                {
+                    return new ApiResponse<object>
+                    {
+                        Error = new ApiError(response.Error.Message ?? "MCP request error")
+                    };
+                }
+
+                return new ApiResponse<object> { Result = response.Result };
+            }
         }
     }
 

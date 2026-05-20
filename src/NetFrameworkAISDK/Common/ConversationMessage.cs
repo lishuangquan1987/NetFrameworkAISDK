@@ -21,6 +21,8 @@ namespace NetFrameworkAISDK.Common
         public string ToolCallId { get; set; }
 
         public List<ToolCallRequest> ToolCalls { get; set; }
+
+        public List<MessageContent> ContentParts { get; set; }
     }
 
     public class ToolCallRequest

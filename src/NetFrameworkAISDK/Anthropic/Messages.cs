@@ -129,14 +129,9 @@ namespace NetFrameworkAISDK.Anthropic
         public ContentBlock ContentBlock { get; set; }
 
         /// <summary>
-        /// 增量数据（content_block_delta 事件）
+        /// 增量数据（content_block_delta / message_delta 事件共用）
         /// </summary>
         public Delta Delta { get; set; }
-
-        /// <summary>
-        /// 消息增量（message_delta 事件）
-        /// </summary>
-        public MessageDeltaData DeltaMessage { get; set; }
 
         /// <summary>
         /// 使用统计增量（message_delta 事件）
@@ -145,33 +140,32 @@ namespace NetFrameworkAISDK.Anthropic
     }
 
     /// <summary>
-    /// 增量数据
+    /// 增量数据（同时用于 content_block_delta 和 message_delta）
     /// </summary>
     public class Delta
     {
         /// <summary>
-        /// 类型（通常是 "text_delta"）
+        /// 类型（"text_delta" / "input_json_delta" / null for message_delta）
         /// </summary>
         public string Type { get; set; }
 
         /// <summary>
-        /// 文本增量
+        /// 文本增量（text_delta 类型时使用）
         /// </summary>
         public string Text { get; set; }
-    }
 
-    /// <summary>
-    /// 消息增量数据
-    /// </summary>
-    public class MessageDeltaData
-    {
         /// <summary>
-        /// 停止原因
+        /// 工具输入 JSON 增量（input_json_delta 类型时使用）
+        /// </summary>
+        public string PartialJson { get; set; }
+
+        /// <summary>
+        /// 停止原因（message_delta 事件时使用）
         /// </summary>
         public string StopReason { get; set; }
 
         /// <summary>
-        /// 停止序列
+        /// 停止序列（message_delta 事件时使用）
         /// </summary>
         public string StopSequence { get; set; }
     }

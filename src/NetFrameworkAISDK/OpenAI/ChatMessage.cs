@@ -31,7 +31,7 @@ namespace NetFrameworkAISDK.OpenAI
         /// <summary>
         /// 多模态内容块列表（用于图像等复杂内容）
         /// </summary>
-        public List<object> ContentParts { get; set; }
+        public List<ImageContentPart> ContentParts { get; set; }
 
         /// <summary>
         /// 工具调用名称（仅 tool 角色）

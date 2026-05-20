@@ -27,7 +27,7 @@ namespace NetFrameworkAISDK.Samples
 
             Console.WriteLine();
             Console.WriteLine("Using configuration:");
-            Console.WriteLine("- API Key: " + MaskKey(config.ApiKey));
+            Console.WriteLine("- API Key: " + SampleConfig.MaskKey(config.ApiKey));
             Console.WriteLine("- Base URL: " + config.BaseUrl);
             Console.WriteLine("- Model: " + config.Model);
 
@@ -113,17 +113,5 @@ namespace NetFrameworkAISDK.Samples
             return "Current time: " + DateTime.Now.ToString("F");
         }
 
-        private string MaskKey(string key)
-        {
-            if (string.IsNullOrEmpty(key))
-            {
-                return "(empty)";
-            }
-            if (key.Length <= 8)
-            {
-                return new string('*', key.Length);
-            }
-            return key.Substring(0, 4) + "..." + key.Substring(key.Length - 4);
-        }
     }
 }

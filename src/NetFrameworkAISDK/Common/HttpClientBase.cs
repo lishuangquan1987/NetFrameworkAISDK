@@ -1,10 +1,11 @@
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
-using System.Reflection;
 using System.Text;
+using System.Threading;
 
 namespace NetFrameworkAISDK.Common
 {
@@ -13,6 +14,8 @@ namespace NetFrameworkAISDK.Common
         protected readonly string ApiKey;
         protected readonly string BaseUrl;
         protected readonly int TimeoutMilliseconds;
+        private readonly int MaxRetries;
+        private readonly int RetryDelayMilliseconds;
 
         static HttpClientBase()
         {
@@ -20,17 +23,23 @@ namespace NetFrameworkAISDK.Common
             {
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)(3072 | 768 | 192);
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine("HttpClientBase: Failed to configure SecurityProtocol: " + ex.Message);
             }
         }
 
         protected HttpClientBase(string apiKey, string baseUrl)
-            : this(apiKey, baseUrl, 30000)
+            : this(apiKey, baseUrl, 30000, 2, 1000)
         {
         }
 
         protected HttpClientBase(string apiKey, string baseUrl, int timeoutMilliseconds)
+            : this(apiKey, baseUrl, timeoutMilliseconds, 2, 1000)
+        {
+        }
+
+        protected HttpClientBase(string apiKey, string baseUrl, int timeoutMilliseconds, int maxRetries, int retryDelayMilliseconds)
         {
             if (string.IsNullOrEmpty(apiKey))
             {
@@ -39,6 +48,8 @@ namespace NetFrameworkAISDK.Common
             ApiKey = apiKey;
             BaseUrl = baseUrl.TrimEnd('/');
             TimeoutMilliseconds = timeoutMilliseconds;
+            MaxRetries = maxRetries;
+            RetryDelayMilliseconds = retryDelayMilliseconds;
         }
 
         protected virtual void ConfigureRequest(HttpWebRequest request)
@@ -77,28 +88,54 @@ namespace NetFrameworkAISDK.Common
 
         private static string BuildQueryString(object queryParams)
         {
-            var properties = queryParams.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            string json = JsonHelper.Serialize(queryParams);
+            var dict = JsonHelper.Deserialize<Dictionary<string, object>>(json);
             var parts = new List<string>();
-            foreach (var prop in properties)
+            foreach (var kvp in dict)
             {
-                var value = prop.GetValue(queryParams, null);
-                if (value != null)
+                if (kvp.Value != null)
                 {
-                    parts.Add(prop.Name + "=" + Uri.EscapeDataString(value.ToString()));
+                    parts.Add(kvp.Key + "=" + Uri.EscapeDataString(kvp.Value.ToString()));
                 }
             }
             if (parts.Count == 0) { return ""; }
             return "?" + string.Join("&", parts);
         }
 
+        private string BuildUrl(string endpoint)
+        {
+            var baseUri = new Uri(BaseUrl + "/");
+            return new Uri(baseUri, endpoint.TrimStart('/')).ToString();
+        }
+
+        private string BuildUrlWithQuery(string endpoint, object queryParams)
+        {
+            var baseUri = new Uri(BaseUrl + "/");
+            var uri = new Uri(baseUri, endpoint.TrimStart('/'));
+            if (queryParams != null)
+            {
+                return uri.ToString() + BuildQueryString(queryParams);
+            }
+            return uri.ToString();
+        }
+
         private ApiResponse<T> Request<T>(string method, string endpoint, object data, object queryParams = null)
+        {
+            return RequestWithRetry<T>(method, endpoint, data, queryParams, 0);
+        }
+
+        private ApiResponse<T> RequestWithRetry<T>(string method, string endpoint, object data, object queryParams, int attempt)
         {
             try
             {
-                string url = BaseUrl + "/" + endpoint.TrimStart('/');
+                string url;
                 if (queryParams != null)
                 {
-                    url = url + BuildQueryString(queryParams);
+                    url = BuildUrlWithQuery(endpoint, queryParams);
+                }
+                else
+                {
+                    url = BuildUrl(endpoint);
                 }
 
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
@@ -130,10 +167,20 @@ namespace NetFrameworkAISDK.Common
             }
             catch (WebException ex)
             {
+                if (ShouldRetry(ex, attempt))
+                {
+                    Thread.Sleep(RetryDelayMilliseconds * (attempt + 1));
+                    return RequestWithRetry<T>(method, endpoint, data, queryParams, attempt + 1);
+                }
                 return HandleWebException<T>(ex);
             }
             catch (Exception ex)
             {
+                if (IsTransientException(ex) && attempt < MaxRetries)
+                {
+                    Thread.Sleep(RetryDelayMilliseconds * (attempt + 1));
+                    return RequestWithRetry<T>(method, endpoint, data, queryParams, attempt + 1);
+                }
                 return new ApiResponse<T> { Error = new ApiError(ex.Message) };
             }
         }
@@ -142,7 +189,7 @@ namespace NetFrameworkAISDK.Common
         {
             try
             {
-                string url = BaseUrl + "/" + endpoint.TrimStart('/');
+                string url = BuildUrl(endpoint);
 
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
                 request.Method = "POST";
@@ -172,9 +219,9 @@ namespace NetFrameworkAISDK.Common
                         string line;
                         while ((line = reader.ReadLine()) != null)
                         {
-                            if (line.Length > 6 && line.StartsWith("data: "))
+                            if (line.StartsWith("data:"))
                             {
-                                string dataLine = line.Substring(6);
+                                string dataLine = line.Substring(5).TrimStart();
                                 if (dataLine == "[DONE]")
                                 {
                                     break;
@@ -184,8 +231,9 @@ namespace NetFrameworkAISDK.Common
                                     T result = JsonHelper.Deserialize<T>(dataLine);
                                     onData(result);
                                 }
-                                catch
+                                catch (Exception parseEx)
                                 {
+                                    Debug.WriteLine("SSE parse error: " + parseEx.Message);
                                 }
                             }
                         }
@@ -206,9 +254,16 @@ namespace NetFrameworkAISDK.Common
         private ApiResponse<T> HandleWebException<T>(WebException ex)
         {
             string errorMessage = ex.Message;
+            int? httpStatusCode = null;
 
             if (ex.Response != null)
             {
+                var httpResponse = ex.Response as HttpWebResponse;
+                if (httpResponse != null)
+                {
+                    httpStatusCode = (int)httpResponse.StatusCode;
+                }
+
                 using (Stream stream = ex.Response.GetResponseStream())
                 using (StreamReader reader = new StreamReader(stream))
                 {
@@ -218,6 +273,7 @@ namespace NetFrameworkAISDK.Common
                         ApiError error = JsonHelper.Deserialize<ApiError>(errorContent);
                         if (!string.IsNullOrEmpty(error.Message))
                         {
+                            error.HttpStatusCode = httpStatusCode;
                             return new ApiResponse<T> { Error = error };
                         }
                     }
@@ -228,7 +284,50 @@ namespace NetFrameworkAISDK.Common
                 }
             }
 
-            return new ApiResponse<T> { Error = new ApiError(errorMessage) };
+            return new ApiResponse<T>
+            {
+                Error = new ApiError(errorMessage)
+                {
+                    HttpStatusCode = httpStatusCode
+                }
+            };
+        }
+
+        private bool ShouldRetry(WebException ex, int attempt)
+        {
+            if (attempt >= MaxRetries)
+            {
+                return false;
+            }
+
+            var httpResponse = ex.Response as HttpWebResponse;
+            if (httpResponse != null)
+            {
+                int statusCode = (int)httpResponse.StatusCode;
+                if (statusCode == 429)
+                {
+                    return true;
+                }
+                if (statusCode >= 500 && statusCode < 600)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsTransientException(Exception ex)
+        {
+            if (ex is TimeoutException)
+            {
+                return true;
+            }
+            if (ex is IOException && ex.InnerException != null && ex.InnerException is System.Net.Sockets.SocketException)
+            {
+                return true;
+            }
+            return false;
         }
 
         public virtual void Dispose()

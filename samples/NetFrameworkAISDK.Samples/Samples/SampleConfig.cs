@@ -93,5 +93,18 @@ namespace NetFrameworkAISDK.Samples
             }
             return defaultValue;
         }
+
+        public static string MaskKey(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                return "(empty)";
+            }
+            if (key.Length <= 8)
+            {
+                return new string('*', key.Length);
+            }
+            return key.Substring(0, 4) + "..." + key.Substring(key.Length - 4);
+        }
     }
 }
