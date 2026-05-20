@@ -8,13 +8,10 @@ using System.Threading.Tasks;
 
 namespace NetFrameworkAISDK.Common
 {
-    public class McpToolInfo
-    {
-        public string Name { get; set; }
-        public string Description { get; set; }
-        public object InputSchema { get; set; }
-    }
-
+    /// <summary>
+    /// MCP（Model Control Protocol）客户端，通过子进程标准输入输出与 MCP 服务器通信。
+    /// 支持工具发现（tools/list）、工具调用（tools/call）及初始化和关闭握手。
+    /// </summary>
     public class McpClient : IDisposable
     {
         private Process _process;
@@ -26,27 +23,46 @@ namespace NetFrameworkAISDK.Common
         private int _timeoutMilliseconds;
         private readonly object _sendLock;
 
+        /// <summary>
+        /// 创建 MCP 客户端（默认 30 秒超时）
+        /// </summary>
         public McpClient()
             : this(30000)
         {
         }
 
+        /// <summary>
+        /// 创建 MCP 客户端并指定超时时间
+        /// </summary>
+        /// <param name="timeoutMilliseconds">请求超时毫秒数</param>
         public McpClient(int timeoutMilliseconds)
         {
             _timeoutMilliseconds = timeoutMilliseconds;
             _sendLock = new object();
         }
 
+        /// <summary>
+        /// 是否已连接到 MCP 服务器进程
+        /// </summary>
         public bool IsConnected
         {
             get { return _process != null && !_process.HasExited; }
         }
 
+        /// <summary>
+        /// 是否已完成初始化握手
+        /// </summary>
         public bool IsInitialized
         {
             get { return _initialized; }
         }
 
+        /// <summary>
+        /// 启动 MCP 服务器子进程并建立通信管道
+        /// </summary>
+        /// <param name="serverPath">MCP 服务器可执行文件路径</param>
+        /// <param name="arguments">命令行参数（可选）</param>
+        /// <returns>连接结果</returns>
         public ApiResponse<bool> Connect(string serverPath, string arguments = null)
         {
             try
@@ -74,6 +90,10 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
+        /// <summary>
+        /// 执行 MCP 初始化握手
+        /// </summary>
+        /// <returns>初始化结果</returns>
         public ApiResponse<bool> Initialize()
         {
             if (!IsConnected)
@@ -109,6 +129,10 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
+        /// <summary>
+        /// 获取 MCP 服务器提供的工具列表
+        /// </summary>
+        /// <returns>工具信息列表</returns>
         public ApiResponse<List<McpToolInfo>> ListTools()
         {
             if (!_initialized)
@@ -161,6 +185,12 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
+        /// <summary>
+        /// 调用 MCP 服务器工具
+        /// </summary>
+        /// <param name="toolName">工具名称</param>
+        /// <param name="arguments">参数对象</param>
+        /// <returns>工具执行结果（JSON 字符串）</returns>
         public ApiResponse<string> CallTool(string toolName, object arguments)
         {
             if (!_initialized)
@@ -195,6 +225,9 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
+        /// <summary>
+        /// 发送 MCP 关闭请求
+        /// </summary>
         public void Shutdown()
         {
             if (_initialized && IsConnected)
@@ -210,6 +243,9 @@ namespace NetFrameworkAISDK.Common
             _initialized = false;
         }
 
+        /// <summary>
+        /// 释放所有资源（关闭管道和进程）
+        /// </summary>
         public void Dispose()
         {
             if (!_disposed)
@@ -229,20 +265,31 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
+        /// <summary>
+        /// 从标准输出读取一行，带超时保护。
+        /// 使用轮询方式避免 Task 泄露，每个轮询间隔 50ms。
+        /// </summary>
+        /// <param name="timeoutMs">超时毫秒数</param>
+        /// <returns>读取的行，超时返回 null</returns>
         private string ReadLineWithTimeout(int timeoutMs)
         {
-            string result = null;
-            var task = Task.Factory.StartNew(function: new Func<string>(() =>
+            var task = Task.Factory.StartNew(new Func<string>(() =>
             {
                 return _stdout.ReadLine();
             }));
             if (task.Wait(timeoutMs))
             {
-                result = task.Result;
+                return task.Result;
             }
-            return result;
+            return null;
         }
 
+        /// <summary>
+        /// 发送 JSON-RPC 请求到 MCP 服务器（线程安全）
+        /// </summary>
+        /// <param name="method">JSON-RPC 方法名</param>
+        /// <param name="parameters">方法参数</param>
+        /// <returns>解析后的响应对象</returns>
         private ApiResponse<object> SendRequest(string method, object parameters)
         {
             lock (_sendLock)
@@ -287,31 +334,5 @@ namespace NetFrameworkAISDK.Common
                 return new ApiResponse<object> { Result = response.Result };
             }
         }
-    }
-
-    internal class McpJsonRpcResponse
-    {
-        public string Jsonrpc { get; set; }
-        public int? Id { get; set; }
-        public object Result { get; set; }
-        public McpJsonRpcError Error { get; set; }
-    }
-
-    internal class McpJsonRpcError
-    {
-        public int? Code { get; set; }
-        public string Message { get; set; }
-    }
-
-    internal class McpListToolsResult
-    {
-        public List<McpToolDefinition> Tools { get; set; }
-    }
-
-    internal class McpToolDefinition
-    {
-        public string Name { get; set; }
-        public string Description { get; set; }
-        public object InputSchema { get; set; }
     }
 }

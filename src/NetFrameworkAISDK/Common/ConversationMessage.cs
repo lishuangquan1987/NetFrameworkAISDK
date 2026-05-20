@@ -2,63 +2,39 @@ using System.Collections.Generic;
 
 namespace NetFrameworkAISDK.Common
 {
-    public static class MessageRole
-    {
-        public const string System = "system";
-        public const string User = "user";
-        public const string Assistant = "assistant";
-        public const string Tool = "tool";
-    }
-
+    /// <summary>
+    /// 统一对话消息，屏蔽不同 AI 提供商的底层消息格式差异
+    /// </summary>
     public class ConversationMessage
     {
+        /// <summary>
+        /// 消息角色（参见 <see cref="MessageRole"/> 常量）
+        /// </summary>
         public string Role { get; set; }
 
+        /// <summary>
+        /// 纯文本内容
+        /// </summary>
         public string Content { get; set; }
 
+        /// <summary>
+        /// 发送者名称（可选）
+        /// </summary>
         public string Name { get; set; }
 
+        /// <summary>
+        /// 工具调用 ID（仅 Tool 角色使用，关联到对应的工具调用请求）
+        /// </summary>
         public string ToolCallId { get; set; }
 
+        /// <summary>
+        /// 工具调用列表（仅 Assistant 角色使用）
+        /// </summary>
         public List<ToolCallRequest> ToolCalls { get; set; }
 
+        /// <summary>
+        /// 多模态内容块列表（用于图像等非文本内容）
+        /// </summary>
         public List<MessageContent> ContentParts { get; set; }
-    }
-
-    public class ToolCallRequest
-    {
-        public string Id { get; set; }
-
-        public string Type { get; set; }
-
-        public string FunctionName { get; set; }
-
-        public string FunctionArguments { get; set; }
-    }
-
-    public class ConversationOptions
-    {
-        public string Model { get; set; }
-
-        public string SystemPrompt { get; set; }
-
-        public int? MaxTokens { get; set; }
-
-        public double? Temperature { get; set; }
-
-        public List<AIFunction> Tools { get; set; }
-
-        public bool Stream { get; set; }
-    }
-
-    public class ConversationResponse
-    {
-        public string Content { get; set; }
-
-        public string Model { get; set; }
-
-        public List<ToolCallRequest> ToolCalls { get; set; }
-
-        public string FinishReason { get; set; }
     }
 }

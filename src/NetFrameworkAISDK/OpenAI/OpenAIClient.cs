@@ -6,30 +6,47 @@ using System.Net;
 namespace NetFrameworkAISDK.OpenAI
 {
     /// <summary>
-    /// OpenAI API client
+    /// OpenAI API 客户端，封装 Chat Completions API 调用。
+    /// 支持文本生成、流式输出和工具调用，自动转换语义消息格式。
     /// </summary>
     public class OpenAIClient : AIClientBase
     {
         private const string DefaultBaseUrl = "https://api.openai.com/v1";
 
+        /// <summary>
+        /// 创建 OpenAI 客户端（使用默认基础 URL）
+        /// </summary>
+        /// <param name="apiKey">OpenAI API 密钥</param>
         public OpenAIClient(string apiKey)
             : this(apiKey, DefaultBaseUrl)
         {
         }
 
+        /// <summary>
+        /// 创建 OpenAI 客户端
+        /// </summary>
+        /// <param name="apiKey">OpenAI API 密钥</param>
+        /// <param name="baseUrl">自定义 API 基础 URL</param>
         public OpenAIClient(string apiKey, string baseUrl)
             : base(apiKey, baseUrl)
         {
         }
 
+        /// <inheritdoc />
         protected override void ConfigureRequest(HttpWebRequest request)
         {
             request.Headers["Authorization"] = "Bearer " + ApiKey;
         }
 
         /// <summary>
-        /// Create chat completion (non-streaming)
+        /// 创建聊天完成（非流式），发送后等待完整响应
         /// </summary>
+        /// <param name="model">模型名称（如 "gpt-4o"）</param>
+        /// <param name="messages">消息列表</param>
+        /// <param name="temperature">温度参数 0-2（可选）</param>
+        /// <param name="maxTokens">最大生成 token 数（可选）</param>
+        /// <param name="tools">工具定义列表（可选）</param>
+        /// <returns>包含聊天完成响应或错误的 ApiResponse</returns>
         public ApiResponse<ChatCompletionResponse> CreateChatCompletion(
             string model,
             List<ChatMessage> messages,
@@ -51,8 +68,15 @@ namespace NetFrameworkAISDK.OpenAI
         }
 
         /// <summary>
-        /// Create chat completion (streaming)
+        /// 创建聊天完成（流式），通过 SSE 实时接收增量响应
         /// </summary>
+        /// <param name="model">模型名称</param>
+        /// <param name="messages">消息列表</param>
+        /// <param name="onData">收到流式分片时的回调</param>
+        /// <param name="onError">发生错误时的回调</param>
+        /// <param name="temperature">温度参数 0-2（可选）</param>
+        /// <param name="maxTokens">最大生成 token 数（可选）</param>
+        /// <param name="tools">工具定义列表（可选）</param>
         public void CreateChatCompletionStream(
             string model,
             List<ChatMessage> messages,
@@ -75,6 +99,7 @@ namespace NetFrameworkAISDK.OpenAI
             PostStream("chat/completions", request, onData, onError);
         }
 
+        /// <inheritdoc />
         public override ApiResponse<ConversationResponse> SendConversation(
             List<ConversationMessage> messages,
             ConversationOptions options)
@@ -100,6 +125,7 @@ namespace NetFrameworkAISDK.OpenAI
             };
         }
 
+        /// <inheritdoc />
         public override void SendConversationStreaming(
             List<ConversationMessage> messages,
             ConversationOptions options,
@@ -151,6 +177,9 @@ namespace NetFrameworkAISDK.OpenAI
                 toolDefs);
         }
 
+        /// <summary>
+        /// 将语义层消息转换为 OpenAI 原生消息格式
+        /// </summary>
         private List<ChatMessage> ConvertToOpenAiMessages(List<ConversationMessage> messages, ConversationOptions options)
         {
             var result = new List<ChatMessage>();
@@ -253,6 +282,9 @@ namespace NetFrameworkAISDK.OpenAI
             return result;
         }
 
+        /// <summary>
+        /// 将 OpenAI 原生响应转换为语义层响应
+        /// </summary>
         private ConversationResponse ConvertFromOpenAiResponse(ChatCompletionResponse openAiResponse)
         {
             var result = new ConversationResponse

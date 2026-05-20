@@ -61,11 +61,11 @@ namespace NetFrameworkAISDK.Samples
                 {
                     Console.Write("\nAssistant: ");
 
-                    var response = agent.Run(userInput, onToolCall: (name, args, result) =>
+                    var response = agent.Run(userInput, onToolCall: (e) =>
                     {
-                        Console.WriteLine("\n>>> Calling tool: " + name);
-                        Console.WriteLine(">>> Arguments: " + args);
-                        Console.WriteLine(">>> Result: " + result);
+                        Console.WriteLine("\n>>> Calling tool: " + e.FunctionName);
+                        Console.WriteLine(">>> Arguments: " + e.FunctionArguments);
+                        Console.WriteLine(">>> Result: " + e.Result);
                     });
 
                     if (response.IsSuccess)

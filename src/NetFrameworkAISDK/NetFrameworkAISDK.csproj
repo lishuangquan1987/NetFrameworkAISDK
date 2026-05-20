@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -44,24 +44,58 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Common\ApiError.cs" />
-    <Compile Include="Common\JsonHelper.cs" />
-    <Compile Include="Common\HttpClientBase.cs" />
-    <Compile Include="Common\AIFunction.cs" />
     <Compile Include="Common\AgentTools.cs" />
-    <Compile Include="Common\McpClient.cs" />
-    <Compile Include="Common\SkillManager.cs" />
-    <Compile Include="Common\MessageContent.cs" />
-    <Compile Include="Common\ConversationMessage.cs" />
-    <Compile Include="Common\IAIClient.cs" />
-    <Compile Include="Common\AIClientBase.cs" />
     <Compile Include="Common\AIAgent.cs" />
+    <Compile Include="Common\AIClientBase.cs" />
+    <Compile Include="Common\AIFunction.cs" />
+    <Compile Include="Common\AIFunctionFactory.cs" />
+    <Compile Include="Common\ApiError.cs" />
+    <Compile Include="Common\ApiResponse.cs" />
+    <Compile Include="Common\ContentType.cs" />
+    <Compile Include="Common\ConversationMessage.cs" />
+    <Compile Include="Common\ConversationOptions.cs" />
+    <Compile Include="Common\ConversationResponse.cs" />
+    <Compile Include="Common\HttpClientBase.cs" />
+    <Compile Include="Common\IAIClient.cs" />
+    <Compile Include="Common\JsonHelper.cs" />
+    <Compile Include="Common\McpClient.cs" />
+    <Compile Include="Common\McpJsonRpcError.cs" />
+    <Compile Include="Common\McpJsonRpcResponse.cs" />
+    <Compile Include="Common\McpListToolsResult.cs" />
+    <Compile Include="Common\McpToolDefinition.cs" />
+    <Compile Include="Common\McpToolInfo.cs" />
+    <Compile Include="Common\MessageContent.cs" />
+    <Compile Include="Common\MessageRole.cs" />
+    <Compile Include="Common\SkillFunctionHandler.cs" />
+    <Compile Include="Common\SkillInfo.cs" />
+    <Compile Include="Common\SkillManager.cs" />
+    <Compile Include="Common\ToolCallEventArgs.cs" />
+    <Compile Include="Common\ToolCallRequest.cs" />
+    <Compile Include="OpenAI\ChatChoice.cs" />
+    <Compile Include="OpenAI\ChatCompletionRequest.cs" />
+    <Compile Include="OpenAI\ChatCompletionResponse.cs" />
+    <Compile Include="OpenAI\ChatCompletionStreamResponse.cs" />
     <Compile Include="OpenAI\ChatMessage.cs" />
-    <Compile Include="OpenAI\ChatCompletion.cs" />
+    <Compile Include="OpenAI\ChatRole.cs" />
+    <Compile Include="OpenAI\ChatStreamChoice.cs" />
+    <Compile Include="OpenAI\FunctionCall.cs" />
+    <Compile Include="OpenAI\FunctionDefinition.cs" />
+    <Compile Include="OpenAI\ImageContentPart.cs" />
+    <Compile Include="OpenAI\ImageDetail.cs" />
     <Compile Include="OpenAI\OpenAIClient.cs" />
-    <Compile Include="Anthropic\AnthropicMessage.cs" />
-    <Compile Include="Anthropic\Messages.cs" />
+    <Compile Include="OpenAI\ToolCall.cs" />
+    <Compile Include="OpenAI\ToolDefinition.cs" />
+    <Compile Include="OpenAI\UsageInfo.cs" />
     <Compile Include="Anthropic\AnthropicClient.cs" />
+    <Compile Include="Anthropic\AnthropicMessage.cs" />
+    <Compile Include="Anthropic\AnthropicRole.cs" />
+    <Compile Include="Anthropic\AnthropicUsage.cs" />
+    <Compile Include="Anthropic\ContentBlock.cs" />
+    <Compile Include="Anthropic\Delta.cs" />
+    <Compile Include="Anthropic\MessagesRequest.cs" />
+    <Compile Include="Anthropic\MessagesResponse.cs" />
+    <Compile Include="Anthropic\StreamEvent.cs" />
+    <Compile Include="Anthropic\StreamEventType.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

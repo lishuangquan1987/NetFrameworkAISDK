@@ -9,11 +9,21 @@ using System.Threading;
 
 namespace NetFrameworkAISDK.Common
 {
+    /// <summary>
+    /// HTTP 客户端抽象基类，提供重试、超时和错误处理的基础设施。
+    /// 配置 TLS 1.2 支持（兼容 .NET 4.0），提供 GET/POST/PUT/DELETE 方法。
+    /// </summary>
     public abstract class HttpClientBase : IDisposable
     {
+        /// <summary>API 密钥</summary>
         protected readonly string ApiKey;
+
+        /// <summary>API 基础 URL</summary>
         protected readonly string BaseUrl;
+
+        /// <summary>请求超时毫秒数</summary>
         protected readonly int TimeoutMilliseconds;
+
         private readonly int MaxRetries;
         private readonly int RetryDelayMilliseconds;
 
@@ -29,16 +39,35 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
+        /// <summary>
+        /// 创建 HTTP 客户端（默认 30 秒超时，2 次重试，1 秒延迟）
+        /// </summary>
+        /// <param name="apiKey">API 密钥</param>
+        /// <param name="baseUrl">API 基础 URL</param>
         protected HttpClientBase(string apiKey, string baseUrl)
             : this(apiKey, baseUrl, 30000, 2, 1000)
         {
         }
 
+        /// <summary>
+        /// 创建 HTTP 客户端（指定超时）
+        /// </summary>
+        /// <param name="apiKey">API 密钥</param>
+        /// <param name="baseUrl">API 基础 URL</param>
+        /// <param name="timeoutMilliseconds">请求超时毫秒数</param>
         protected HttpClientBase(string apiKey, string baseUrl, int timeoutMilliseconds)
             : this(apiKey, baseUrl, timeoutMilliseconds, 2, 1000)
         {
         }
 
+        /// <summary>
+        /// 创建 HTTP 客户端（完全自定义）
+        /// </summary>
+        /// <param name="apiKey">API 密钥</param>
+        /// <param name="baseUrl">API 基础 URL</param>
+        /// <param name="timeoutMilliseconds">请求超时毫秒数</param>
+        /// <param name="maxRetries">最大重试次数</param>
+        /// <param name="retryDelayMilliseconds">重试延迟基数（毫秒）</param>
         protected HttpClientBase(string apiKey, string baseUrl, int timeoutMilliseconds, int maxRetries, int retryDelayMilliseconds)
         {
             if (string.IsNullOrEmpty(apiKey))
@@ -52,40 +81,65 @@ namespace NetFrameworkAISDK.Common
             RetryDelayMilliseconds = retryDelayMilliseconds;
         }
 
+        /// <summary>
+        /// 配置 HTTP 请求的扩展点（子类可重写以添加自定义 Header 等）
+        /// </summary>
+        /// <param name="request">HTTP 请求对象</param>
         protected virtual void ConfigureRequest(HttpWebRequest request)
         {
         }
 
+        /// <summary>
+        /// 发送 GET 请求
+        /// </summary>
         protected ApiResponse<T> Get<T>(string endpoint)
         {
             return Request<T>("GET", endpoint, null);
         }
 
+        /// <summary>
+        /// 发送带查询参数的 GET 请求
+        /// </summary>
         protected ApiResponse<T> Get<T>(string endpoint, object queryParams)
         {
             return Request<T>("GET", endpoint, null, queryParams);
         }
 
+        /// <summary>
+        /// 发送 POST 请求
+        /// </summary>
         protected ApiResponse<T> Post<T>(string endpoint, object data)
         {
             return Request<T>("POST", endpoint, data);
         }
 
+        /// <summary>
+        /// 发送 PUT 请求
+        /// </summary>
         protected ApiResponse<T> Put<T>(string endpoint, object data)
         {
             return Request<T>("PUT", endpoint, data);
         }
 
+        /// <summary>
+        /// 发送 DELETE 请求
+        /// </summary>
         protected ApiResponse<T> Delete<T>(string endpoint)
         {
             return Request<T>("DELETE", endpoint, null);
         }
 
+        /// <summary>
+        /// 发送带查询参数的 DELETE 请求
+        /// </summary>
         protected ApiResponse<T> Delete<T>(string endpoint, object queryParams)
         {
             return Request<T>("DELETE", endpoint, null, queryParams);
         }
 
+        /// <summary>
+        /// 构建查询参数字符串
+        /// </summary>
         private static string BuildQueryString(object queryParams)
         {
             string json = JsonHelper.Serialize(queryParams);
@@ -102,12 +156,18 @@ namespace NetFrameworkAISDK.Common
             return "?" + string.Join("&", parts);
         }
 
+        /// <summary>
+        /// 构建请求 URL
+        /// </summary>
         private string BuildUrl(string endpoint)
         {
             var baseUri = new Uri(BaseUrl + "/");
             return new Uri(baseUri, endpoint.TrimStart('/')).ToString();
         }
 
+        /// <summary>
+        /// 构建带查询参数的 URL
+        /// </summary>
         private string BuildUrlWithQuery(string endpoint, object queryParams)
         {
             var baseUri = new Uri(BaseUrl + "/");
@@ -119,11 +179,17 @@ namespace NetFrameworkAISDK.Common
             return uri.ToString();
         }
 
+        /// <summary>
+        /// 执行 HTTP 请求（无查询参数入口）
+        /// </summary>
         private ApiResponse<T> Request<T>(string method, string endpoint, object data, object queryParams = null)
         {
             return RequestWithRetry<T>(method, endpoint, data, queryParams, 0);
         }
 
+        /// <summary>
+        /// 执行 HTTP 请求并支持重试
+        /// </summary>
         private ApiResponse<T> RequestWithRetry<T>(string method, string endpoint, object data, object queryParams, int attempt)
         {
             try
@@ -185,6 +251,14 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
+        /// <summary>
+        /// 发送 POST 请求并处理 SSE 流式响应
+        /// </summary>
+        /// <typeparam name="T">每个 SSE 事件的反序列化类型</typeparam>
+        /// <param name="endpoint">API 端点</param>
+        /// <param name="data">请求体数据</param>
+        /// <param name="onData">每收到一个数据块时的回调</param>
+        /// <param name="onError">发生错误时的回调</param>
         protected void PostStream<T>(string endpoint, object data, Action<T> onData, Action<ApiError> onError)
         {
             try
@@ -251,48 +325,9 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
-        private ApiResponse<T> HandleWebException<T>(WebException ex)
-        {
-            string errorMessage = ex.Message;
-            int? httpStatusCode = null;
-
-            if (ex.Response != null)
-            {
-                var httpResponse = ex.Response as HttpWebResponse;
-                if (httpResponse != null)
-                {
-                    httpStatusCode = (int)httpResponse.StatusCode;
-                }
-
-                using (Stream stream = ex.Response.GetResponseStream())
-                using (StreamReader reader = new StreamReader(stream))
-                {
-                    string errorContent = reader.ReadToEnd();
-                    try
-                    {
-                        ApiError error = JsonHelper.Deserialize<ApiError>(errorContent);
-                        if (!string.IsNullOrEmpty(error.Message))
-                        {
-                            error.HttpStatusCode = httpStatusCode;
-                            return new ApiResponse<T> { Error = error };
-                        }
-                    }
-                    catch
-                    {
-                        errorMessage = errorContent;
-                    }
-                }
-            }
-
-            return new ApiResponse<T>
-            {
-                Error = new ApiError(errorMessage)
-                {
-                    HttpStatusCode = httpStatusCode
-                }
-            };
-        }
-
+        /// <summary>
+        /// 判断 WebException 是否应重试（429/5xx 状态码）
+        /// </summary>
         private bool ShouldRetry(WebException ex, int attempt)
         {
             if (attempt >= MaxRetries)
@@ -300,36 +335,72 @@ namespace NetFrameworkAISDK.Common
                 return false;
             }
 
-            var httpResponse = ex.Response as HttpWebResponse;
-            if (httpResponse != null)
+            var response = ex.Response as HttpWebResponse;
+            if (response == null)
             {
-                int statusCode = (int)httpResponse.StatusCode;
-                if (statusCode == 429)
-                {
-                    return true;
-                }
-                if (statusCode >= 500 && statusCode < 600)
-                {
-                    return true;
-                }
+                return IsTransientException(ex);
             }
 
-            return false;
+            int statusCode = (int)response.StatusCode;
+            return statusCode == 429 || statusCode >= 500;
         }
 
-        private static bool IsTransientException(Exception ex)
+        /// <summary>
+        /// 判断异常是否为瞬态错误（超时、连接中断等）
+        /// </summary>
+        private bool IsTransientException(Exception ex)
         {
-            if (ex is TimeoutException)
-            {
-                return true;
-            }
-            if (ex is IOException && ex.InnerException != null && ex.InnerException is System.Net.Sockets.SocketException)
-            {
-                return true;
-            }
-            return false;
+            return ex is TimeoutException || ex is IOException;
         }
 
+        /// <summary>
+        /// 处理 WebException 并转换为 ApiResponse
+        /// </summary>
+        private static ApiResponse<T> HandleWebException<T>(WebException ex)
+        {
+            var response = ex.Response as HttpWebResponse;
+            int httpStatus = response != null ? (int)response.StatusCode : 0;
+            string message = GetErrorMessage(response) ?? ex.Message;
+
+            return new ApiResponse<T>
+            {
+                Error = new ApiError(message)
+                {
+                    Type = "api_error",
+                    HttpStatusCode = httpStatus > 0 ? httpStatus : (int?)null
+                }
+            };
+        }
+
+        /// <summary>
+        /// 从 HTTP 响应中提取错误消息
+        /// </summary>
+        private static string GetErrorMessage(HttpWebResponse response)
+        {
+            if (response == null)
+            {
+                return null;
+            }
+            try
+            {
+                using (Stream stream = response.GetResponseStream())
+                {
+                    if (stream == null) { return null; }
+                    using (StreamReader reader = new StreamReader(stream))
+                    {
+                        return reader.ReadToEnd();
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 释放资源
+        /// </summary>
         public virtual void Dispose()
         {
         }

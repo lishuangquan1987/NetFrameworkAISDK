@@ -81,7 +81,7 @@ namespace NetFrameworkAISDK.Samples
             foreach (var tool in mcpTools)
             {
                 Console.WriteLine("\n  - " + tool.Name + ": " + (tool.Description ?? "(no description)"));
-                mcpFunctions.Add(AIFunctionFactory.CreateFromMcpTool(
+                mcpFunctions.Add(AIFunction.CreateFromMcpTool(
                     tool.Name,
                     tool.Description,
                     tool.InputSchema,
@@ -197,11 +197,11 @@ namespace NetFrameworkAISDK.Samples
             {
                 Console.Write("\nAssistant: ");
 
-                var response = agent.Run(userInput, onToolCall: (name, args, result) =>
+                var response = agent.Run(userInput, onToolCall: (e) =>
                 {
-                    Console.WriteLine("\n>>> MCP Tool: " + name);
-                    Console.WriteLine(">>> Arguments: " + args);
-                    Console.WriteLine(">>> Result: " + result);
+                    Console.WriteLine("\n>>> MCP Tool: " + e.FunctionName);
+                    Console.WriteLine(">>> Arguments: " + e.FunctionArguments);
+                    Console.WriteLine(">>> Result: " + e.Result);
                 });
 
                 if (response.IsSuccess)

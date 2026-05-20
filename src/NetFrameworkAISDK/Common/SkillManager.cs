@@ -1,20 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 
 namespace NetFrameworkAISDK.Common
 {
-    public class SkillInfo
-    {
-        public string Name { get; set; }
-        public string Description { get; set; }
-        public string DirectoryPath { get; set; }
-        public string SkillFilePath { get; set; }
-    }
-
+    /// <summary>
+    /// 技能管理器，实现 MAF 风格的渐进式披露模式。
+    /// 仅在 system prompt 中注入技能摘要，通过工具调用按需加载完整技能内容。
+    /// </summary>
     public static class SkillManager
     {
+        /// <summary>
+        /// 扫描目录，发现所有包含 SKILL.md 的技能子目录
+        /// </summary>
+        /// <param name="directoryPath">要扫描的根目录路径</param>
+        /// <returns>发现的技能信息列表</returns>
         public static List<SkillInfo> DiscoverSkills(string directoryPath)
         {
             var skills = new List<SkillInfo>();
@@ -39,7 +41,7 @@ namespace NetFrameworkAISDK.Common
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine("Warning: Failed to parse skill at " + skillMdPath + ": " + ex.Message);
+                        Debug.WriteLine("Warning: Failed to parse skill at " + skillMdPath + ": " + ex.Message);
                     }
                 }
             }
@@ -47,6 +49,9 @@ namespace NetFrameworkAISDK.Common
             return skills;
         }
 
+        /// <summary>
+        /// 解析 SKILL.md 文件，提取名称和描述
+        /// </summary>
         private static SkillInfo ParseSkillFile(string filePath)
         {
             if (!File.Exists(filePath))
@@ -91,15 +96,32 @@ namespace NetFrameworkAISDK.Common
                 name = Path.GetFileName(Path.GetDirectoryName(filePath));
             }
 
+            var dirPath = Path.GetDirectoryName(filePath);
+            var files = new List<string>();
+
+            if (Directory.Exists(dirPath))
+            {
+                var allFiles = Directory.GetFiles(dirPath, "*.*", SearchOption.AllDirectories);
+                foreach (var f in allFiles)
+                {
+                    var relPath = f.Substring(dirPath.Length).TrimStart('\\', '/');
+                    files.Add(relPath);
+                }
+            }
+
             return new SkillInfo
             {
                 Name = name,
                 Description = description ?? name,
-                DirectoryPath = Path.GetDirectoryName(filePath),
-                SkillFilePath = filePath
+                DirectoryPath = dirPath,
+                SkillFilePath = filePath,
+                Files = new System.Collections.ObjectModel.ReadOnlyCollection<string>(files)
             };
         }
 
+        /// <summary>
+        /// 加载 SKILL.md 文件的正文部分（跳过 YAML front matter）
+        /// </summary>
         private static string LoadSkillBody(string filePath)
         {
             if (!File.Exists(filePath))
@@ -127,11 +149,20 @@ namespace NetFrameworkAISDK.Common
             return content;
         }
 
+        /// <summary>
+        /// 加载技能的正文内容
+        /// </summary>
         private static string LoadSkillBody(SkillInfo skill)
         {
             return LoadSkillBody(skill.SkillFilePath);
         }
 
+        /// <summary>
+        /// 构建渐进式披露提示词。仅在 system prompt 中注入技能名称和摘要，
+        /// 完整指令通过工具调用按需加载。
+        /// </summary>
+        /// <param name="skills">已发现的技能列表</param>
+        /// <returns>格式化的可用技能提示文本</returns>
         public static string BuildProgressivePrompt(List<SkillInfo> skills)
         {
             if (skills == null || skills.Count == 0)
@@ -158,6 +189,11 @@ namespace NetFrameworkAISDK.Common
             return string.Join("\n", parts.ToArray());
         }
 
+        /// <summary>
+        /// 创建 load_skill 工具函数，用于按需加载技能完整内容
+        /// </summary>
+        /// <param name="skills">可用技能列表</param>
+        /// <returns>load_skill AI 函数</returns>
         public static AIFunction CreateLoadSkillFunction(List<SkillInfo> skills)
         {
             var handler = new SkillFunctionHandler(skills);
@@ -165,6 +201,11 @@ namespace NetFrameworkAISDK.Common
             return AIFunctionFactory.Create(method, handler);
         }
 
+        /// <summary>
+        /// 创建 read_skill 工具函数，用于读取技能文件的原始内容
+        /// </summary>
+        /// <param name="skills">可用技能列表</param>
+        /// <returns>read_skill AI 函数</returns>
         public static AIFunction CreateReadSkillTool(List<SkillInfo> skills)
         {
             var handler = new SkillFunctionHandler(skills);
@@ -172,59 +213,9 @@ namespace NetFrameworkAISDK.Common
             return AIFunctionFactory.Create(method, handler);
         }
 
-        private sealed class SkillFunctionHandler
-        {
-            private readonly List<SkillInfo> _skills;
-
-            public SkillFunctionHandler(List<SkillInfo> skills)
-            {
-                _skills = skills;
-            }
-
-            [Description("Loads the full content and instructions of a specific skill")]
-            public string LoadSkill(
-                [Description("The name of the skill")] string skillName)
-            {
-                if (string.IsNullOrEmpty(skillName))
-                {
-                    return "Error: Skill name cannot be empty.";
-                }
-
-                SkillInfo matched = FindSkill(_skills, skillName);
-                if (matched == null)
-                {
-                    return "Error: Skill '" + skillName + "' not found. Available skills: " + string.Join(", ", _skills.ConvertAll(s => s.Name).ToArray());
-                }
-
-                return "# Skill: " + matched.Name + "\n\n" + LoadSkillBody(matched);
-            }
-
-            [Description("Read the full content of a specific skill, including its instructions, scripts, and resources")]
-            public string ReadSkill(
-                [Description("The name of the skill")] string skillName)
-            {
-                if (string.IsNullOrEmpty(skillName))
-                {
-                    return "Error: Skill name cannot be empty.";
-                }
-
-                SkillInfo matched = FindSkill(_skills, skillName);
-                if (matched == null)
-                {
-                    return "Error: Skill '" + skillName + "' not found.";
-                }
-
-                try
-                {
-                    return File.ReadAllText(matched.SkillFilePath);
-                }
-                catch (Exception ex)
-                {
-                    return "Error reading skill file: " + ex.Message;
-                }
-            }
-        }
-
+        /// <summary>
+        /// 按名称（大小写不敏感）查找技能
+        /// </summary>
         private static SkillInfo FindSkill(List<SkillInfo> skills, string skillName)
         {
             foreach (var s in skills)

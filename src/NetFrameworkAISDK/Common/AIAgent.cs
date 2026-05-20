@@ -3,6 +3,9 @@ using System.Collections.Generic;
 
 namespace NetFrameworkAISDK.Common
 {
+    /// <summary>
+    /// AI 代理，封装工具调用循环逻辑。提供统一接口，支持 OpenAI 和 Anthropic 等多种后端。
+    /// </summary>
     public class AIAgent
     {
         private readonly IAIClient _client;
@@ -11,6 +14,15 @@ namespace NetFrameworkAISDK.Common
         private readonly Dictionary<string, AIFunction> _functionMap;
         private readonly List<ConversationMessage> _conversationHistory;
 
+        private const int DefaultMaxIterations = 10;
+
+        /// <summary>
+        /// 创建 AIAgent 实例
+        /// </summary>
+        /// <param name="client">AI 客户端（OpenAI 或 Anthropic）</param>
+        /// <param name="model">模型名称</param>
+        /// <param name="instructions">系统指令/提示词</param>
+        /// <param name="tools">可用的工具函数列表</param>
         public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools)
         {
             _client = client;
@@ -36,6 +48,10 @@ namespace NetFrameworkAISDK.Common
             _client.ConfigureTools(_functions);
         }
 
+        /// <summary>
+        /// 动态添加工具函数
+        /// </summary>
+        /// <param name="function">要添加的 AI 函数</param>
         public void AddTool(AIFunction function)
         {
             if (function == null || string.IsNullOrEmpty(function.Name))
@@ -47,17 +63,35 @@ namespace NetFrameworkAISDK.Common
             _client.ConfigureTools(_functions);
         }
 
+        /// <summary>
+        /// 设置温度参数（控制回复的随机性）
+        /// </summary>
+        /// <param name="temperature">温度值（0-2），null 使用默认值</param>
         public void SetTemperature(double? temperature)
         {
             _options.Temperature = temperature;
         }
 
+        /// <summary>
+        /// 设置最大 Token 数
+        /// </summary>
+        /// <param name="maxTokens">最大 Token 数，null 使用默认值</param>
         public void SetMaxTokens(int? maxTokens)
         {
             _options.MaxTokens = maxTokens;
         }
 
-        public ApiResponse<string> Run(string userMessage, Action<string, string, string> onToolCall = null)
+        /// <summary>
+        /// 执行一次非流式对话，自动处理工具调用循环
+        /// </summary>
+        /// <param name="userMessage">用户输入消息</param>
+        /// <param name="onToolCall">
+        /// 工具调用回调（可选）。参数 <see cref="ToolCallEventArgs"/> 包含：
+        /// FunctionName（函数名）、FunctionArguments（参数 JSON）、
+        /// Result（执行结果）、ToolCallId（调用 ID）
+        /// </param>
+        /// <returns>包含最终 AI 回复或错误信息的响应</returns>
+        public ApiResponse<string> Run(string userMessage, Action<ToolCallEventArgs> onToolCall = null)
         {
             _conversationHistory.Add(new ConversationMessage
             {
@@ -65,56 +99,71 @@ namespace NetFrameworkAISDK.Common
                 Content = userMessage
             });
 
-            return AgentLoop(onToolCall);
+            return AgentLoop(onToolCall, DefaultMaxIterations);
         }
 
-        private ApiResponse<string> AgentLoop(Action<string, string, string> onToolCall)
+        /// <summary>
+        /// 工具调用内部循环。持续调用模型直到无工具调用或达到最大迭代次数
+        /// </summary>
+        private ApiResponse<string> AgentLoop(Action<ToolCallEventArgs> onToolCall, int remainingIterations)
         {
-            int maxIterations = 10;
-            for (int iter = 0; iter < maxIterations; iter++)
+            if (remainingIterations <= 0)
             {
-                var response = _client.SendConversation(_conversationHistory, _options);
-
-                if (!response.IsSuccess)
+                var lastMsg = _conversationHistory[_conversationHistory.Count - 1];
+                return new ApiResponse<string>
                 {
-                    return new ApiResponse<string> { Error = response.Error };
-                }
-
-                var result = response.Result;
-                var assistantMsg = new ConversationMessage
-                {
-                    Role = MessageRole.Assistant,
-                    Content = result.Content != null ? result.Content : ""
+                    Result = lastMsg.Content != null ? lastMsg.Content : ""
                 };
-
-                bool hasToolCalls = result.ToolCalls != null && result.ToolCalls.Count > 0;
-
-                if (hasToolCalls)
-                {
-                    assistantMsg.ToolCalls = new List<ToolCallRequest>(result.ToolCalls);
-                }
-
-                _conversationHistory.Add(assistantMsg);
-
-                if (!hasToolCalls)
-                {
-                    return new ApiResponse<string>
-                    {
-                        Result = result.Content != null ? result.Content : ""
-                    };
-                }
-
-                ExecuteToolCalls(result.ToolCalls, onToolCall);
             }
 
-            var lastMsg = _conversationHistory[_conversationHistory.Count - 1];
-            return new ApiResponse<string>
+            var response = _client.SendConversation(_conversationHistory, _options);
+
+            if (!response.IsSuccess)
             {
-                Result = lastMsg.Content != null ? lastMsg.Content : ""
+                return new ApiResponse<string> { Error = response.Error };
+            }
+
+            var result = response.Result;
+            var assistantMsg = new ConversationMessage
+            {
+                Role = MessageRole.Assistant,
+                Content = result.Content != null ? result.Content : ""
             };
+
+            bool hasToolCalls = result.ToolCalls != null && result.ToolCalls.Count > 0;
+
+            if (hasToolCalls)
+            {
+                assistantMsg.ToolCalls = new List<ToolCallRequest>(result.ToolCalls);
+            }
+
+            _conversationHistory.Add(assistantMsg);
+
+            if (!hasToolCalls)
+            {
+                return new ApiResponse<string>
+                {
+                    Result = result.Content != null ? result.Content : ""
+                };
+            }
+
+            ExecuteToolCalls(result.ToolCalls, onToolCall);
+
+            return AgentLoop(onToolCall, remainingIterations - 1);
         }
 
-        public void RunStreaming(string userMessage, Action<string> onUpdate, Action<ApiError> onError, Action<string, string, string> onToolCall = null)
+        /// <summary>
+        /// 执行流式对话，通过回调逐字输出 AI 回复，自动处理工具调用循环
+        /// </summary>
+        /// <param name="userMessage">用户输入消息</param>
+        /// <param name="onUpdate">每收到一个文本块时回调（增量文本）</param>
+        /// <param name="onError">发生错误时回调</param>
+        /// <param name="onToolCall">工具调用回调（可选）</param>
+        public void RunStreaming(
+            string userMessage,
+            Action<string> onUpdate,
+            Action<ApiError> onError,
+            Action<ToolCallEventArgs> onToolCall = null)
         {
             _conversationHistory.Add(new ConversationMessage
             {
@@ -122,10 +171,18 @@ namespace NetFrameworkAISDK.Common
                 Content = userMessage
             });
 
-            StreamingLoop(onUpdate, onError, onToolCall, 10);
+            StreamingLoop(onUpdate, onError, onToolCall, DefaultMaxIterations);
         }
 
-        private void StreamingLoop(Action<string> onUpdate, Action<ApiError> onError, Action<string, string, string> onToolCall, int remainingIterations)
+        /// <summary>
+        /// 流式工具调用循环。通过 SendConversationStreaming 收集分块数据，
+        /// 合并工具调用后在内容块结束时触发
+        /// </summary>
+        private void StreamingLoop(
+            Action<string> onUpdate,
+            Action<ApiError> onError,
+            Action<ToolCallEventArgs> onToolCall,
+            int remainingIterations)
         {
             if (remainingIterations <= 0)
             {
@@ -211,7 +268,13 @@ namespace NetFrameworkAISDK.Common
 
                     if (onToolCall != null)
                     {
-                        onToolCall(functionName, functionArgs, result);
+                        onToolCall(new ToolCallEventArgs
+                        {
+                            FunctionName = functionName,
+                            FunctionArguments = functionArgs,
+                            Result = result,
+                            ToolCallId = toolCall.Id
+                        });
                     }
                 }
             }
@@ -219,7 +282,10 @@ namespace NetFrameworkAISDK.Common
             StreamingLoop(onUpdate, onError, onToolCall, remainingIterations - 1);
         }
 
-        private void ExecuteToolCalls(List<ToolCallRequest> toolCalls, Action<string, string, string> onToolCall)
+        /// <summary>
+        /// 执行工具调用列表中的所有工具，并将结果添加到对话历史
+        /// </summary>
+        private void ExecuteToolCalls(List<ToolCallRequest> toolCalls, Action<ToolCallEventArgs> onToolCall)
         {
             foreach (var toolCall in toolCalls)
             {
@@ -245,12 +311,21 @@ namespace NetFrameworkAISDK.Common
 
                     if (onToolCall != null)
                     {
-                        onToolCall(functionName, functionArgs, result);
+                        onToolCall(new ToolCallEventArgs
+                        {
+                            FunctionName = functionName,
+                            FunctionArguments = functionArgs,
+                            Result = result,
+                            ToolCallId = toolCall.Id
+                        });
                     }
                 }
             }
         }
 
+        /// <summary>
+        /// 合并流式响应中的增量工具调用数据（相同 Id 的工具调用累积参数）
+        /// </summary>
         private static void MergeToolCall(List<ToolCallRequest> collected, ToolCallRequest delta)
         {
             foreach (var existing in collected)
@@ -271,11 +346,18 @@ namespace NetFrameworkAISDK.Common
             collected.Add(delta);
         }
 
+        /// <summary>
+        /// 清空对话历史
+        /// </summary>
         public void ClearHistory()
         {
             _conversationHistory.Clear();
         }
 
+        /// <summary>
+        /// 获取当前对话历史的副本
+        /// </summary>
+        /// <returns>对话消息列表</returns>
         public List<ConversationMessage> GetHistory()
         {
             return new List<ConversationMessage>(_conversationHistory);

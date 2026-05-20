@@ -145,7 +145,7 @@ namespace NetFrameworkAISDK.Common
                                     matchCount++;
                                 }
                             }
-                            catch
+                            catch (Exception)
                             {
                             }
                         }
@@ -201,7 +201,7 @@ namespace NetFrameworkAISDK.Common
                                     matchCount++;
                                 }
                             }
-                            catch { }
+                            catch (Exception) { }
                         }
                         var rootFiles = System.IO.Directory.GetFiles(searchPath, filePattern);
                         foreach (var f in rootFiles)
@@ -227,7 +227,7 @@ namespace NetFrameworkAISDK.Common
                                 matchCount++;
                             }
                         }
-                        catch { }
+                        catch (Exception) { }
                     }
                     var rootFiles2 = System.IO.Directory.GetFiles(searchPath, pattern);
                     foreach (var f in rootFiles2)

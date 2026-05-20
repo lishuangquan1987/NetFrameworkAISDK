@@ -7,23 +7,34 @@ using System.Net;
 namespace NetFrameworkAISDK.Anthropic
 {
     /// <summary>
-    /// Anthropic API client
+    /// Anthropic API 客户端，封装 Messages API 调用。
+    /// 支持文本生成、流式输出和工具调用，自动转换语义消息格式。
     /// </summary>
     public class AnthropicClient : AIClientBase
     {
         private const string DefaultBaseUrl = "https://api.anthropic.com/v1";
         private const string ApiVersion = "2023-06-01";
 
+        /// <summary>
+        /// 创建 Anthropic 客户端（使用默认基础 URL）
+        /// </summary>
+        /// <param name="apiKey">Anthropic API 密钥</param>
         public AnthropicClient(string apiKey)
             : this(apiKey, DefaultBaseUrl)
         {
         }
 
+        /// <summary>
+        /// 创建 Anthropic 客户端
+        /// </summary>
+        /// <param name="apiKey">Anthropic API 密钥</param>
+        /// <param name="baseUrl">自定义 API 基础 URL</param>
         public AnthropicClient(string apiKey, string baseUrl)
             : base(apiKey, baseUrl)
         {
         }
 
+        /// <inheritdoc />
         protected override void ConfigureRequest(HttpWebRequest request)
         {
             request.Headers["anthropic-version"] = ApiVersion;
@@ -31,8 +42,15 @@ namespace NetFrameworkAISDK.Anthropic
         }
 
         /// <summary>
-        /// Create message (non-streaming)
+        /// 创建消息（非流式），发送后等待完整响应
         /// </summary>
+        /// <param name="model">模型名称（如 "claude-sonnet-4-20250514"）</param>
+        /// <param name="messages">消息列表</param>
+        /// <param name="maxTokens">最大生成 token 数</param>
+        /// <param name="system">系统提示（可选）</param>
+        /// <param name="temperature">温度参数 0-1（可选）</param>
+        /// <param name="tools">工具定义列表（可选）</param>
+        /// <returns>包含消息响应或错误的 ApiResponse</returns>
         public ApiResponse<MessagesResponse> CreateMessage(
             string model,
             List<AnthropicMessage> messages,
@@ -56,8 +74,16 @@ namespace NetFrameworkAISDK.Anthropic
         }
 
         /// <summary>
-        /// Create message (streaming)
+        /// 创建消息（流式），通过 SSE 实时接收增量响应
         /// </summary>
+        /// <param name="model">模型名称</param>
+        /// <param name="messages">消息列表</param>
+        /// <param name="maxTokens">最大生成 token 数</param>
+        /// <param name="onEvent">收到 SSE 事件时的回调</param>
+        /// <param name="onError">发生错误时的回调</param>
+        /// <param name="system">系统提示（可选）</param>
+        /// <param name="temperature">温度参数 0-1（可选）</param>
+        /// <param name="tools">工具定义列表（可选）</param>
         public void CreateMessageStream(
             string model,
             List<AnthropicMessage> messages,
@@ -82,6 +108,7 @@ namespace NetFrameworkAISDK.Anthropic
             PostStream("messages", request, onEvent, onError);
         }
 
+        /// <inheritdoc />
         public override ApiResponse<ConversationResponse> SendConversation(
             List<ConversationMessage> messages,
             ConversationOptions options)
@@ -109,6 +136,7 @@ namespace NetFrameworkAISDK.Anthropic
             };
         }
 
+        /// <inheritdoc />
         public override void SendConversationStreaming(
             List<ConversationMessage> messages,
             ConversationOptions options,
@@ -229,6 +257,9 @@ namespace NetFrameworkAISDK.Anthropic
                 toolDefs);
         }
 
+        /// <summary>
+        /// 内容块流式状态，用于累积增量数据
+        /// </summary>
         private class ContentBlockState
         {
             public string Type;
@@ -237,6 +268,9 @@ namespace NetFrameworkAISDK.Anthropic
             public readonly System.Text.StringBuilder TextBuilder = new System.Text.StringBuilder();
         }
 
+        /// <summary>
+        /// 将语义层消息转换为 Anthropic 原生消息格式
+        /// </summary>
         private List<AnthropicMessage> ConvertToAnthropicMessages(List<ConversationMessage> messages)
         {
             var result = new List<AnthropicMessage>();
@@ -361,6 +395,9 @@ namespace NetFrameworkAISDK.Anthropic
             return result;
         }
 
+        /// <summary>
+        /// 将 Anthropic 原生响应转换为语义层响应
+        /// </summary>
         private ConversationResponse ConvertFromAnthropicResponse(MessagesResponse anthropicResponse)
         {
             var result = new ConversationResponse
