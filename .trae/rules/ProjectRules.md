@@ -33,6 +33,8 @@
 
 参考 OpenAi SDK:https://github.com/openai/openai-dotnet
 
+参考 Microsoft Agent Framework:https://github.com/microsoft/agent-framework/tree/main/dotnet
+
 ### 项目基本信息
 - **项目名称**：NetFrameworkAI
 - **项目类型**：类库项目（Class Library）

@@ -2,3 +2,6 @@ packages/
 samples/NetFrameworkAI.Samples/bin/
 src/NetFrameworkAI/bin/
 tests/NetFrameworkAI.Tests/bin/
+samples/NetFrameworkAISDK.Samples/bin/
+tests/NetFrameworkAISDK.Tests/bin/
+src/NetFrameworkAISDK/bin/
