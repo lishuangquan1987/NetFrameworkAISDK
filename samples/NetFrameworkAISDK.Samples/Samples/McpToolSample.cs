@@ -221,8 +221,9 @@ namespace NetFrameworkAISDK.Samples
 
         private void RunAnthropicWithMcp(List<AIFunction> mcpFunctions)
         {
-            Console.WriteLine("\nAnthropic configuration for MCP-powered Chat:");
-            var config = SampleConfig.ReadFromConsole("Anthropic", "https://api.anthropic.com/v1", "claude-3-haiku-20240307");
+            Console.WriteLine("\nAnthropic configuration for MCP-powered Agent:");
+            var config = SampleConfig.ReadFromConsole("Anthropic", "https://api.anthropic.com/v1",
+                "claude-3-haiku-20240307");
             if (!config.HasValidConfig)
             {
                 Console.WriteLine("API key is required. Skipping Anthropic test.");
@@ -248,46 +249,42 @@ namespace NetFrameworkAISDK.Samples
                 }
                 toolNames = toolNames + f.Name;
             }
-            Console.WriteLine("\nMCP tools available: " + toolNames);
 
-            var conversationHistory = new List<AnthropicMessage>
-            {
-                new AnthropicMessage
-                {
-                    Role = "user",
-                    Content = "Hello! I have MCP tools available: " + toolNames + ". What can you do?"
-                }
-            };
-
-            var response = client.CreateMessage(
+            var agent = new Common.AIAgent(
+                client,
                 config.Model,
-                conversationHistory,
-                config.MaxTokens,
-                null,
-                config.Temperature
+                instructions: "You are a helpful assistant. You have MCP tools available: " + toolNames + ". Use them when needed.",
+                tools: mcpFunctions
             );
 
-            if (response.IsSuccess)
+            Console.WriteLine("\nMCP tools injected into Anthropic AIAgent: " + toolNames);
+            Console.WriteLine("\nEnter your message (type 'exit' to quit):");
+            Console.Write("You: ");
+            string userInput = Console.ReadLine();
+
+            while (userInput != "exit")
             {
-                var msg = response.Result;
-                if (msg != null && msg.Content != null && msg.Content.Count > 0)
+                Console.Write("\nAssistant: ");
+
+                var response = agent.Run(userInput, onToolCall: (e) =>
                 {
-                    foreach (var block in msg.Content)
-                    {
-                        if (block.Type == "text")
-                        {
-                            Console.WriteLine("\nAssistant: " + block.Text);
-                        }
-                    }
+                    Console.WriteLine("\n>>> MCP Tool: " + e.FunctionName);
+                    Console.WriteLine(">>> Arguments: " + e.FunctionArguments);
+                    Console.WriteLine(">>> Result: " + e.Result);
+                });
+
+                if (response.IsSuccess)
+                {
+                    Console.WriteLine(response.Result);
+                }
+                else
+                {
+                    Console.WriteLine("Error: " + response.Error.Message);
                 }
 
-                Console.WriteLine("\nNote: Anthropic MCP tool calling requires building ToolDefinition[]");
-                Console.WriteLine("from AIFunction list and passing to CreateMessage.");
-                Console.WriteLine("The AIAgent for Anthropic is under development.");
-            }
-            else
-            {
-                Console.WriteLine("Error: " + response.Error.Message);
+                Console.WriteLine("\nEnter your message (type 'exit' to quit):");
+                Console.Write("You: ");
+                userInput = Console.ReadLine();
             }
         }
     }
