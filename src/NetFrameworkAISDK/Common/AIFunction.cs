@@ -31,6 +31,17 @@ namespace NetFrameworkAISDK.Common
         public Func<string, string> Execute { get; set; }
 
         /// <summary>
+        /// 是否需要用户确认后才能执行。为 true 时 Agent 会暂停等待 ToolApproval 回调审批。
+        /// </summary>
+        public bool RequiresApproval { get; set; }
+
+        /// <summary>
+        /// 动态审批判断函数（可选，优先级高于 RequiresApproval）。
+        /// 参数：(functionName, functionArguments_json) → 是否需要审批
+        /// </summary>
+        public Func<string, string, bool> ApprovalPredicate { get; set; }
+
+        /// <summary>
         /// 创建 AI 函数实例
         /// </summary>
         public AIFunction()

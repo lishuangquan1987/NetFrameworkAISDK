@@ -50,6 +50,41 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
+        /// 扫描多个目录，按优先级去重合并技能。
+        /// 数组中越靠后的目录优先级越高（同名 skill 以后者为准）。
+        /// </summary>
+        /// <param name="directoryPaths">要扫描的目录路径数组</param>
+        /// <returns>合并去重后的技能信息列表</returns>
+        public static List<SkillInfo> DiscoverSkills(string[] directoryPaths)
+        {
+            var allSkills = new List<SkillInfo>();
+            var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (directoryPaths == null || directoryPaths.Length == 0)
+            {
+                return allSkills;
+            }
+
+            for (int i = directoryPaths.Length - 1; i >= 0; i--)
+            {
+                var dirSkills = DiscoverSkills(directoryPaths[i]);
+                if (dirSkills != null)
+                {
+                    foreach (var skill in dirSkills)
+                    {
+                        if (!seenNames.Contains(skill.Name))
+                        {
+                            seenNames.Add(skill.Name);
+                            allSkills.Insert(0, skill);
+                        }
+                    }
+                }
+            }
+
+            return allSkills;
+        }
+
+        /// <summary>
         /// 解析 SKILL.md 文件，提取名称和描述
         /// </summary>
         private static SkillInfo ParseSkillFile(string filePath)

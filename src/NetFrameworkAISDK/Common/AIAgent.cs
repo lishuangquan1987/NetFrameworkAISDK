@@ -1,8 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace NetFrameworkAISDK.Common
 {
+    /// <summary>
+    /// 工具审批回调委托。返回 true 表示批准执行，false 表示拒绝执行。
+    /// </summary>
+    /// <param name="args">工具调用事件参数（含函数名、参数、是否需要审批等信息）</param>
+    /// <returns>是否批准执行该工具</returns>
+    public delegate bool ToolApprovalCallback(ToolCallEventArgs args);
+
     /// <summary>
     /// AI 代理，封装工具调用循环逻辑。提供统一接口，支持 OpenAI 和 Anthropic 等多种后端。
     /// </summary>
@@ -14,9 +22,15 @@ namespace NetFrameworkAISDK.Common
         private readonly Dictionary<string, AIFunction> _functionMap;
         private readonly List<ConversationMessage> _conversationHistory;
         private readonly List<SkillInfo> _skills;
-        private readonly string _skillsDirectory;
+        private readonly string[] _skillsDirectories;
 
         private const int DefaultMaxIterations = 10;
+
+        /// <summary>
+        /// 工具审批回调。设置为 true 表示批准执行，false 表示拒绝执行。
+        /// 设置后，所有标记了 RequiresApproval 的工具调用都会先通过此回调审批。
+        /// </summary>
+        public ToolApprovalCallback ToolApproval { get; set; }
 
         /// <summary>
         /// 创建 AIAgent 实例（基础构造，不含默认工具和 Skills）
@@ -38,18 +52,18 @@ namespace NetFrameworkAISDK.Common
         /// <param name="instructions">系统指令/提示词</param>
         /// <param name="tools">用户自定义工具函数列表</param>
         /// <param name="includeDefaultTools">是否自动包含 AgentTools.CreateDefaultTools() 的默认工具</param>
-        /// <param name="skillsDirectory">Skills 目录路径，传入后自动发现并集成渐进式披露</param>
-        public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools, bool includeDefaultTools, string skillsDirectory)
+        /// <param name="skillsDirectories">Skills 目录路径数组（优先级从低到高），传入后自动发现并集成渐进式披露</param>
+        public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools, bool includeDefaultTools, string[] skillsDirectories)
         {
             _client = client;
             _skills = new List<SkillInfo>();
-            _skillsDirectory = skillsDirectory;
+            _skillsDirectories = skillsDirectories;
 
             string fullInstructions = instructions;
 
-            if (!string.IsNullOrEmpty(skillsDirectory))
+            if (skillsDirectories != null && skillsDirectories.Length > 0)
             {
-                var discoveredSkills = SkillManager.DiscoverSkills(skillsDirectory);
+                var discoveredSkills = SkillManager.DiscoverSkills(skillsDirectories);
                 if (discoveredSkills != null && discoveredSkills.Count > 0)
                 {
                     _skills = discoveredSkills;
@@ -401,7 +415,8 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
-        /// 执行工具调用列表中的所有工具，并将结果添加到对话历史
+        /// 执行工具调用列表中的所有工具，并将结果添加到对话历史。
+        /// 如果工具标记了 RequiresApproval 且设置了 ToolApprovalCallback，会先回调审批。
         /// </summary>
         private void ExecuteToolCalls(List<ToolCallRequest> toolCalls, Action<ToolCallEventArgs> onToolCall)
         {
@@ -418,6 +433,42 @@ namespace NetFrameworkAISDK.Common
 
                 if (function != null)
                 {
+                    bool needsApproval = function.RequiresApproval;
+                    if (function.ApprovalPredicate != null)
+                    {
+                        needsApproval = function.ApprovalPredicate(functionName, functionArgs);
+                    }
+
+                    if (needsApproval && ToolApproval != null)
+                    {
+                        var approvalArgs = new ToolCallEventArgs
+                        {
+                            FunctionName = functionName,
+                            FunctionArguments = functionArgs,
+                            ToolCallId = toolCall.Id,
+                            RequiresApproval = true
+                        };
+
+                        if (!ToolApproval(approvalArgs))
+                        {
+                            _conversationHistory.Add(new ConversationMessage
+                            {
+                                Role = MessageRole.Tool,
+                                Name = functionName,
+                                ToolCallId = toolCall.Id,
+                                Content = "[REJECTED] User denied execution of tool: " + functionName
+                            });
+
+                            if (onToolCall != null)
+                            {
+                                approvalArgs.Result = "[REJECTED]";
+                                approvalArgs.IsApproved = false;
+                                onToolCall(approvalArgs);
+                            }
+                            continue;
+                        }
+                    }
+
                     var result = function.Execute(functionArgs);
                     _conversationHistory.Add(new ConversationMessage
                     {
@@ -470,17 +521,17 @@ namespace NetFrameworkAISDK.Common
         /// <param name="client">AI 客户端（OpenAI 或 Anthropic）</param>
         /// <param name="model">模型名称</param>
         /// <param name="instructions">系统指令/提示词</param>
-        /// <param name="skillsDirectory">Skills 目录路径（可选）</param>
+        /// <param name="skillsDirectories">Skills 目录路径数组（可选），优先级从低到高</param>
         /// <param name="extraTools">额外的自定义工具（可选）</param>
         /// <returns>配置完成的 AIAgent 实例</returns>
         public static AIAgent CreateWithDefaults(
             IAIClient client,
             string model,
             string instructions,
-            string skillsDirectory = null,
+            string[] skillsDirectories = null,
             IEnumerable<AIFunction> extraTools = null)
         {
-            return new AIAgent(client, model, instructions, extraTools, true, skillsDirectory);
+            return new AIAgent(client, model, instructions, extraTools, true, skillsDirectories);
         }
 
         /// <summary>
@@ -498,6 +549,27 @@ namespace NetFrameworkAISDK.Common
             IEnumerable<AIFunction> tools = null)
         {
             return new AIAgent(client, model, instructions, tools, false, null);
+        }
+
+        /// <summary>
+        /// 获取三层 Skills 目录的默认路径（全局 → 项目 → 本地）。
+        /// 优先级：local > project > global（同级 skill 高优先级覆盖低优先级）。
+        /// </summary>
+        /// <param name="projectSkillsDir">项目级 Skills 目录路径（可选）</param>
+        /// <returns>按优先级排列的目录路径数组</returns>
+        public static string[] GetDefaultSkillPaths(string projectSkillsDir = null)
+        {
+            var paths = new List<string>();
+            paths.Add(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".agents"));
+            if (!string.IsNullOrEmpty(projectSkillsDir))
+            {
+                paths.Add(projectSkillsDir);
+            }
+            paths.Add(Path.Combine(
+                projectSkillsDir ?? ".", "skills.local"));
+            return paths.ToArray();
         }
 
         /// <summary>

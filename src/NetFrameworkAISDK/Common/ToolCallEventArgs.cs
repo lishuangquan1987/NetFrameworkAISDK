@@ -26,5 +26,15 @@ namespace NetFrameworkAISDK.Common
         /// 工具调用 ID
         /// </summary>
         public string ToolCallId { get; set; }
+
+        /// <summary>
+        /// 是否需要用户审批
+        /// </summary>
+        public bool RequiresApproval { get; set; }
+
+        /// <summary>
+        /// 审批状态：null=未决定, true=已批准, false=已拒绝
+        /// </summary>
+        public bool? IsApproved { get; set; }
     }
 }
