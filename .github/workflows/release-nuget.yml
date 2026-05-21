@@ -3,6 +3,12 @@ name: Release NuGet Package
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "NuGet package version (e.g., 1.2.3)"
+        required: true
+        type: string
 
 jobs:
   build-and-publish:
@@ -27,13 +33,21 @@ jobs:
           Write-Host "Reference assemblies path: $refDir"
           echo "FRAMEWORK_PATH_OVERRIDE=$refDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
 
-      - name: Extract version from release tag
+      - name: Extract version
         id: get_version
         shell: pwsh
         run: |
-          $tag = "${{ github.event.release.tag_name }}"
-          $version = $tag -replace '^v', ''
-          echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $trigger = "${{ github.event_name }}"
+          if ($trigger -eq "release")
+          {
+            $tag = "${{ github.event.release.tag_name }}"
+            $version = $tag -replace '^v', ''
+          }
+          else
+          {
+            $version = "${{ github.event.inputs.version }}"
+          }
+          echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
           echo "Extracted version: $version"
 
       - name: Restore NuGet packages
