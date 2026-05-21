@@ -3,6 +3,7 @@
 > **OpenAI & Anthropic SDK for .NET Framework 4.0+** — AI Agent, tool calling, MCP client, skill management.
 
 [![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.0+-5C2D91)](https://dotnet.microsoft.com/download/dotnet-framework)
+[![NuGet](https://img.shields.io/nuget/v/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 [🇨🇳 中文文档](README.zh-CN.md)

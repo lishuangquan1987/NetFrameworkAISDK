@@ -3,6 +3,7 @@
 > **面向 .NET Framework 4.0+ 的 OpenAI & Anthropic SDK** — AI Agent、工具调用、MCP 客户端、技能管理。
 
 [![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.0+-5C2D91)](https://dotnet.microsoft.com/download/dotnet-framework)
+[![NuGet](https://img.shields.io/nuget/v/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 [🇬🇧 English Documentation](README.md)

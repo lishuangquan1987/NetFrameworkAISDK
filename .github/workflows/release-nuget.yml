@@ -1,0 +1,47 @@
+name: Release NuGet Package
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Extract version from release tag
+        id: get_version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          $version = $tag -replace '^v', ''
+          echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "Extracted version: $version"
+
+      - name: Restore NuGet packages
+        run: nuget restore NetFrameworkAISDK.sln
+
+      - name: Build solution (Release)
+        run: msbuild NetFrameworkAISDK.sln /t:Rebuild /p:Configuration=Release
+
+      - name: Create NuGet package
+        run: |
+          nuget pack src\NetFrameworkAISDK\NetFrameworkAISDK.nuspec `
+            -Version $env:VERSION `
+            -Properties Configuration=Release `
+            -OutputDirectory .\nupkg
+
+      - name: Push package to NuGet.org
+        run: |
+          nuget push .\nupkg\NetFrameworkAISDK.$env:VERSION.nupkg `
+            -Source https://api.nuget.org/v3/index.json `
+            -ApiKey ${{ secrets.NUGET_API_KEY }}

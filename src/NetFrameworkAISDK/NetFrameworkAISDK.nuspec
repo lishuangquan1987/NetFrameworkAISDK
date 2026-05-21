@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+  <metadata>
+    <id>NetFrameworkAISDK</id>
+    <version>$version$</version>
+    <title>NetFrameworkAI SDK</title>
+    <authors>NetFrameworkAI</authors>
+    <owners>NetFrameworkAI</owners>
+    <license type="expression">MIT</license>
+    <projectUrl>https://github.com/NetFrameworkAI/NetFrameworkAI-SDK</projectUrl>
+    <repository type="git" url="https://github.com/NetFrameworkAI/NetFrameworkAI-SDK" />
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>
+      OpenAI and Anthropic SDK for .NET Framework 4.0+.
+
+      Features:
+      - Unified IAIClient interface for both OpenAI and Anthropic
+      - Built-in AI Agent with automated tool-calling loop
+      - Streaming support via callbacks
+      - MAF-style Skill Manager with progressive disclosure
+      - MCP (Model Control Protocol) client support
+      - Multi-modal (text + image) content support
+      - Structured JSON output with generic type support
+      - Compatible with .NET Framework 4.0+ (no C# 6.0+ features)
+    </description>
+    <summary>OpenAI &amp; Anthropic SDK for .NET Framework 4.0+ with AI Agent, tool calling, MCP client, and skill management.</summary>
+    <releaseNotes>https://github.com/NetFrameworkAI/NetFrameworkAI-SDK/releases</releaseNotes>
+    <copyright>Copyright © 2026</copyright>
+    <language>en-US</language>
+    <tags>openai anthropic ai agent sdk dotnet-framework-4.0 tool-call mcp skill-manager</tags>
+    <dependencies>
+      <dependency id="Newtonsoft.Json" version="13.0.1" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="bin\Release\NetFrameworkAISDK.dll" target="lib\net40\NetFrameworkAISDK.dll" />
+    <file src="bin\Release\NetFrameworkAISDK.xml" target="lib\net40\NetFrameworkAISDK.xml" />
+  </files>
+</package>
