@@ -50,6 +50,8 @@
     <Compile Include="Samples\AnthropicAIAgentSample.cs" />
     <Compile Include="Samples\McpToolSample.cs" />
     <Compile Include="Samples\SkillsSample.cs" />
+    <Compile Include="Samples\MultimodalSample.cs" />
+    <Compile Include="Samples\StructuredOutputSample.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\NetFrameworkAISDK\NetFrameworkAISDK.csproj">

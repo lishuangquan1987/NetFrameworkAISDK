@@ -36,5 +36,10 @@ namespace NetFrameworkAISDK.OpenAI
         /// 可用工具列表
         /// </summary>
         public List<ToolDefinition> Tools { get; set; }
+
+        /// <summary>
+        /// 响应格式配置（结构化输出），为 null 时不启用
+        /// </summary>
+        public OpenAiResponseFormat ResponseFormat { get; set; }
     }
 }

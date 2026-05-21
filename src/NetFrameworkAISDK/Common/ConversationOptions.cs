@@ -36,5 +36,10 @@ namespace NetFrameworkAISDK.Common
         /// 是否启用流式输出
         /// </summary>
         public bool Stream { get; set; }
+
+        /// <summary>
+        /// 结构化输出格式（为 null 时不启用结构化输出）
+        /// </summary>
+        public ResponseFormat ResponseFormat { get; set; }
     }
 }

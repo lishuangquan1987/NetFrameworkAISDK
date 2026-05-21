@@ -48,6 +48,8 @@
     <Compile Include="Common\AIFunctionTests.cs" />
     <Compile Include="Common\AgentToolsTests.cs" />
     <Compile Include="Common\SkillManagerTests.cs" />
+    <Compile Include="Common\MessageContentTests.cs" />
+    <Compile Include="Common\JsonSchemaGeneratorTests.cs" />
     <Compile Include="OpenAI\ChatMessageTests.cs" />
     <Compile Include="Anthropic\AnthropicMessageTests.cs" />
   </ItemGroup>

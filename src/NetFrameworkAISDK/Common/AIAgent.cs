@@ -13,36 +13,89 @@ namespace NetFrameworkAISDK.Common
         private readonly List<AIFunction> _functions;
         private readonly Dictionary<string, AIFunction> _functionMap;
         private readonly List<ConversationMessage> _conversationHistory;
+        private readonly List<SkillInfo> _skills;
+        private readonly string _skillsDirectory;
 
         private const int DefaultMaxIterations = 10;
 
         /// <summary>
-        /// 创建 AIAgent 实例
+        /// 创建 AIAgent 实例（基础构造，不含默认工具和 Skills）
         /// </summary>
         /// <param name="client">AI 客户端（OpenAI 或 Anthropic）</param>
         /// <param name="model">模型名称</param>
         /// <param name="instructions">系统指令/提示词</param>
         /// <param name="tools">可用的工具函数列表</param>
         public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools)
+            : this(client, model, instructions, tools, false, null)
+        {
+        }
+
+        /// <summary>
+        /// 创建 AIAgent 实例（完整构造），支持自动集成默认工具和 Skills
+        /// </summary>
+        /// <param name="client">AI 客户端（OpenAI 或 Anthropic）</param>
+        /// <param name="model">模型名称</param>
+        /// <param name="instructions">系统指令/提示词</param>
+        /// <param name="tools">用户自定义工具函数列表</param>
+        /// <param name="includeDefaultTools">是否自动包含 AgentTools.CreateDefaultTools() 的默认工具</param>
+        /// <param name="skillsDirectory">Skills 目录路径，传入后自动发现并集成渐进式披露</param>
+        public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools, bool includeDefaultTools, string skillsDirectory)
         {
             _client = client;
-            _options = new ConversationOptions
+            _skills = new List<SkillInfo>();
+            _skillsDirectory = skillsDirectory;
+
+            string fullInstructions = instructions;
+
+            if (!string.IsNullOrEmpty(skillsDirectory))
             {
-                Model = model,
-                SystemPrompt = instructions
-            };
-            _functions = tools != null ? new List<AIFunction>(tools) : new List<AIFunction>();
-            _functionMap = new Dictionary<string, AIFunction>();
-            if (tools != null)
-            {
-                foreach (var f in tools)
+                var discoveredSkills = SkillManager.DiscoverSkills(skillsDirectory);
+                if (discoveredSkills != null && discoveredSkills.Count > 0)
                 {
-                    if (f != null && !string.IsNullOrEmpty(f.Name))
+                    _skills = discoveredSkills;
+                    var skillPrompt = SkillManager.BuildProgressivePrompt(_skills);
+                    if (!string.IsNullOrEmpty(skillPrompt))
                     {
-                        _functionMap[f.Name] = f;
+                        fullInstructions = fullInstructions + "\n\n" + skillPrompt;
                     }
                 }
             }
+
+            _options = new ConversationOptions
+            {
+                Model = model,
+                SystemPrompt = fullInstructions
+            };
+
+            _functions = new List<AIFunction>();
+            if (includeDefaultTools)
+            {
+                var defaultTools = AgentTools.CreateDefaultTools();
+                if (defaultTools != null)
+                {
+                    _functions.AddRange(defaultTools);
+                }
+            }
+            if (tools != null)
+            {
+                _functions.AddRange(tools);
+            }
+
+            if (_skills.Count > 0)
+            {
+                _functions.Add(SkillManager.CreateLoadSkillFunction(_skills));
+                _functions.Add(SkillManager.CreateReadSkillTool(_skills));
+            }
+
+            _functionMap = new Dictionary<string, AIFunction>();
+            foreach (var f in _functions)
+            {
+                if (f != null && !string.IsNullOrEmpty(f.Name))
+                {
+                    _functionMap[f.Name] = f;
+                }
+            }
+
             _conversationHistory = new List<ConversationMessage>();
 
             _client.ConfigureTools(_functions);
@@ -93,13 +146,64 @@ namespace NetFrameworkAISDK.Common
         /// <returns>包含最终 AI 回复或错误信息的响应</returns>
         public ApiResponse<string> Run(string userMessage, Action<ToolCallEventArgs> onToolCall = null)
         {
-            _conversationHistory.Add(new ConversationMessage
-            {
-                Role = MessageRole.User,
-                Content = userMessage
-            });
-
+            AddUserMessage(userMessage, null);
             return AgentLoop(onToolCall, DefaultMaxIterations);
+        }
+
+        /// <summary>
+        /// 执行一次非流式多模态对话，支持文本+图片输入
+        /// </summary>
+        /// <param name="userMessage">用户文本消息</param>
+        /// <param name="contentParts">多模态内容块列表（图片等），可为 null</param>
+        /// <param name="onToolCall">工具调用回调（可选）</param>
+        /// <returns>包含最终 AI 回复或错误信息的响应</returns>
+        public ApiResponse<string> Run(string userMessage, List<MessageContent> contentParts, Action<ToolCallEventArgs> onToolCall = null)
+        {
+            AddUserMessage(userMessage, contentParts);
+            return AgentLoop(onToolCall, DefaultMaxIterations);
+        }
+
+        /// <summary>
+        /// 执行结构化对话，AI 输出强类型对象
+        /// </summary>
+        /// <typeparam name="T">期望的输出类型（需有公开无参构造函数）</typeparam>
+        /// <param name="userMessage">用户消息</param>
+        /// <param name="onToolCall">工具调用回调（可选）</param>
+        /// <returns>包含反序列化对象或错误信息的响应</returns>
+        public ApiResponse<T> RunStructured<T>(string userMessage, Action<ToolCallEventArgs> onToolCall = null)
+        {
+            var schemaName = typeof(T).Name;
+            var jsonSchema = JsonSchemaGenerator.GenerateFromType(typeof(T), schemaName);
+
+            _options.ResponseFormat = new ResponseFormat
+            {
+                Type = "json_schema",
+                JsonSchema = jsonSchema,
+                SchemaName = schemaName,
+                Strict = true
+            };
+
+            var response = Run(userMessage, onToolCall);
+
+            _options.ResponseFormat = null;
+
+            if (!response.IsSuccess)
+            {
+                return new ApiResponse<T> { Error = response.Error };
+            }
+
+            try
+            {
+                var result = JsonHelper.Deserialize<T>(response.Result);
+                return new ApiResponse<T> { Result = result };
+            }
+            catch (Exception ex)
+            {
+                return new ApiResponse<T>
+                {
+                    Error = new ApiError { Message = "Structured output parse failed: " + ex.Message }
+                };
+            }
         }
 
         /// <summary>
@@ -165,12 +269,26 @@ namespace NetFrameworkAISDK.Common
             Action<ApiError> onError,
             Action<ToolCallEventArgs> onToolCall = null)
         {
-            _conversationHistory.Add(new ConversationMessage
-            {
-                Role = MessageRole.User,
-                Content = userMessage
-            });
+            AddUserMessage(userMessage, null);
+            StreamingLoop(onUpdate, onError, onToolCall, DefaultMaxIterations);
+        }
 
+        /// <summary>
+        /// 执行流式多模态对话，支持文本+图片输入
+        /// </summary>
+        /// <param name="userMessage">用户文本消息</param>
+        /// <param name="contentParts">多模态内容块列表（图片等），可为 null</param>
+        /// <param name="onUpdate">每收到一个文本块时回调（增量文本）</param>
+        /// <param name="onError">发生错误时回调</param>
+        /// <param name="onToolCall">工具调用回调（可选）</param>
+        public void RunStreaming(
+            string userMessage,
+            List<MessageContent> contentParts,
+            Action<string> onUpdate,
+            Action<ApiError> onError,
+            Action<ToolCallEventArgs> onToolCall = null)
+        {
+            AddUserMessage(userMessage, contentParts);
             StreamingLoop(onUpdate, onError, onToolCall, DefaultMaxIterations);
         }
 
@@ -344,6 +462,57 @@ namespace NetFrameworkAISDK.Common
                 }
             }
             collected.Add(delta);
+        }
+
+        /// <summary>
+        /// 便捷创建带默认工具和 Skills 的 AIAgent
+        /// </summary>
+        /// <param name="client">AI 客户端（OpenAI 或 Anthropic）</param>
+        /// <param name="model">模型名称</param>
+        /// <param name="instructions">系统指令/提示词</param>
+        /// <param name="skillsDirectory">Skills 目录路径（可选）</param>
+        /// <param name="extraTools">额外的自定义工具（可选）</param>
+        /// <returns>配置完成的 AIAgent 实例</returns>
+        public static AIAgent CreateWithDefaults(
+            IAIClient client,
+            string model,
+            string instructions,
+            string skillsDirectory = null,
+            IEnumerable<AIFunction> extraTools = null)
+        {
+            return new AIAgent(client, model, instructions, extraTools, true, skillsDirectory);
+        }
+
+        /// <summary>
+        /// 便捷创建最小化 AIAgent（不含默认工具和 Skills）
+        /// </summary>
+        /// <param name="client">AI 客户端（OpenAI 或 Anthropic）</param>
+        /// <param name="model">模型名称</param>
+        /// <param name="instructions">系统指令/提示词</param>
+        /// <param name="tools">可用的工具函数列表（可选）</param>
+        /// <returns>配置完成的 AIAgent 实例</returns>
+        public static AIAgent CreateMinimal(
+            IAIClient client,
+            string model,
+            string instructions,
+            IEnumerable<AIFunction> tools = null)
+        {
+            return new AIAgent(client, model, instructions, tools, false, null);
+        }
+
+        /// <summary>
+        /// 将用户消息添加到对话历史
+        /// </summary>
+        /// <param name="userMessage">用户文本消息</param>
+        /// <param name="contentParts">多模态内容块列表（可为 null）</param>
+        private void AddUserMessage(string userMessage, List<MessageContent> contentParts)
+        {
+            _conversationHistory.Add(new ConversationMessage
+            {
+                Role = MessageRole.User,
+                Content = userMessage,
+                ContentParts = contentParts
+            });
         }
 
         /// <summary>

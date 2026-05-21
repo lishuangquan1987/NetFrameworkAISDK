@@ -107,12 +107,32 @@ namespace NetFrameworkAISDK.OpenAI
             var openAiMessages = ConvertToOpenAiMessages(messages, options);
             var toolDefs = BuildToolDefinitions(options);
 
-            var response = CreateChatCompletion(
-                options.Model,
-                openAiMessages,
-                options.Temperature,
-                options.MaxTokens,
-                toolDefs);
+            var request = new ChatCompletionRequest
+            {
+                Model = options.Model,
+                Messages = openAiMessages,
+                Temperature = options.Temperature,
+                MaxTokens = options.MaxTokens,
+                Tools = toolDefs,
+                Stream = false
+            };
+
+            if (options.ResponseFormat != null)
+            {
+                var schemaObj = Newtonsoft.Json.JsonConvert.DeserializeObject<object>(options.ResponseFormat.JsonSchema);
+                request.ResponseFormat = new OpenAiResponseFormat
+                {
+                    Type = options.ResponseFormat.Type,
+                    JsonSchema = new JsonSchemaObject
+                    {
+                        Name = options.ResponseFormat.SchemaName,
+                        Strict = options.ResponseFormat.Strict,
+                        Schema = schemaObj
+                    }
+                };
+            }
+
+            var response = Post<ChatCompletionResponse>("chat/completions", request);
 
             if (!response.IsSuccess)
             {

@@ -58,6 +58,7 @@
     <Compile Include="Common\HttpClientBase.cs" />
     <Compile Include="Common\IAIClient.cs" />
     <Compile Include="Common\JsonHelper.cs" />
+    <Compile Include="Common\JsonSchemaGenerator.cs" />
     <Compile Include="Common\McpClient.cs" />
     <Compile Include="Common\McpJsonRpcError.cs" />
     <Compile Include="Common\McpJsonRpcResponse.cs" />
@@ -66,6 +67,7 @@
     <Compile Include="Common\McpToolInfo.cs" />
     <Compile Include="Common\MessageContent.cs" />
     <Compile Include="Common\MessageRole.cs" />
+    <Compile Include="Common\ResponseFormat.cs" />
     <Compile Include="Common\SkillFunctionHandler.cs" />
     <Compile Include="Common\SkillInfo.cs" />
     <Compile Include="Common\SkillManager.cs" />
@@ -83,6 +85,7 @@
     <Compile Include="OpenAI\ImageContentPart.cs" />
     <Compile Include="OpenAI\ImageDetail.cs" />
     <Compile Include="OpenAI\OpenAIClient.cs" />
+    <Compile Include="OpenAI\OpenAiResponseFormat.cs" />
     <Compile Include="OpenAI\ToolCall.cs" />
     <Compile Include="OpenAI\ToolDefinition.cs" />
     <Compile Include="OpenAI\UsageInfo.cs" />

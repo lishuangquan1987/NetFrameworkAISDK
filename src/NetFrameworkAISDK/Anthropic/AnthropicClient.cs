@@ -117,6 +117,19 @@ namespace NetFrameworkAISDK.Anthropic
             var toolDefs = BuildToolDefinitions(options);
             int maxTokens = options.MaxTokens.HasValue ? options.MaxTokens.Value : 1024;
 
+            if (options.ResponseFormat != null)
+            {
+                if (toolDefs == null)
+                {
+                    toolDefs = new List<ToolDefinition>();
+                }
+                var structuredTool = BuildStructuredOutputTool(options.ResponseFormat);
+                if (structuredTool != null)
+                {
+                    toolDefs.Add(structuredTool);
+                }
+            }
+
             var response = CreateMessage(
                 options.Model,
                 anthropicMessages,
@@ -424,22 +437,55 @@ namespace NetFrameworkAISDK.Anthropic
 
                     if (block.Type == "tool_use")
                     {
-                        if (result.ToolCalls == null)
+                        if (block.Name == "structured_output")
                         {
-                            result.ToolCalls = new List<ToolCallRequest>();
+                            result.Content = block.Input != null ? JsonHelper.Serialize(block.Input) : "{}";
+                            result.FinishReason = "stop";
                         }
-                        result.ToolCalls.Add(new ToolCallRequest
+                        else
                         {
-                            Id = block.Id,
-                            Type = "function",
-                            FunctionName = block.Name,
-                            FunctionArguments = block.Input != null ? JsonHelper.Serialize(block.Input) : "{}"
-                        });
+                            if (result.ToolCalls == null)
+                            {
+                                result.ToolCalls = new List<ToolCallRequest>();
+                            }
+                            result.ToolCalls.Add(new ToolCallRequest
+                            {
+                                Id = block.Id,
+                                Type = "function",
+                                FunctionName = block.Name,
+                                FunctionArguments = block.Input != null ? JsonHelper.Serialize(block.Input) : "{}"
+                            });
+                        }
                     }
                 }
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 从 ResponseFormat 构建结构化输出工具（Anthropic tool-use hack）
+        /// </summary>
+        private ToolDefinition BuildStructuredOutputTool(ResponseFormat format)
+        {
+            if (format == null || string.IsNullOrEmpty(format.JsonSchema))
+            {
+                return null;
+            }
+
+            var schemaObj = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, object>>(format.JsonSchema);
+            var toolDef = new ToolDefinition
+            {
+                Type = "function",
+                Function = new FunctionDefinition
+                {
+                    Name = "structured_output",
+                    Description = "Output the structured data as a valid JSON object matching the required schema",
+                    Parameters = schemaObj
+                }
+            };
+
+            return toolDef;
         }
     }
 }

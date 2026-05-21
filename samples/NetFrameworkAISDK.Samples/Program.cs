@@ -42,6 +42,12 @@ namespace NetFrameworkAISDK.Samples
                     case "8":
                         RunSample(new SkillsSample());
                         break;
+                    case "9":
+                        RunSample(new MultimodalSample());
+                        break;
+                    case "10":
+                        RunSample(new StructuredOutputSample());
+                        break;
                     case "0":
                         Console.WriteLine("\nExiting...");
                         return;
@@ -63,6 +69,8 @@ namespace NetFrameworkAISDK.Samples
             Console.WriteLine("6. Anthropic - Tool Calling with AIAgent (NEW)");
             Console.WriteLine("7. MCP Tool Calling - Connect MCP Server + AIAgent");
             Console.WriteLine("8. Agent Skills - Discover and Load SKILL.md");
+            Console.WriteLine("9. Multimodal Chat - Image + Text Input with AIAgent");
+            Console.WriteLine("10. Structured Output - AI returns typed objects");
             Console.WriteLine("0. Exit");
             Console.WriteLine();
             Console.Write("Enter your choice: ");
