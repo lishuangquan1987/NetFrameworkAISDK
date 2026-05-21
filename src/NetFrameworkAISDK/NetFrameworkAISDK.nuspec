@@ -4,11 +4,11 @@
     <id>NetFrameworkAISDK</id>
     <version>$version$</version>
     <title>NetFrameworkAI SDK</title>
-    <authors>NetFrameworkAI</authors>
-    <owners>NetFrameworkAI</owners>
+    <authors>lishuangquan1987</authors>
+    <owners>lishuangquan1987</owners>
     <license type="expression">MIT</license>
-    <projectUrl>https://github.com/NetFrameworkAI/NetFrameworkAI-SDK</projectUrl>
-    <repository type="git" url="https://github.com/NetFrameworkAI/NetFrameworkAI-SDK" />
+    <projectUrl>https://github.com/lishuangquan1987/NetFrameworkAISDK</projectUrl>
+    <repository type="git" url="https://github.com/lishuangquan1987/NetFrameworkAISDK" />
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>
       OpenAI and Anthropic SDK for .NET Framework 4.0+.
