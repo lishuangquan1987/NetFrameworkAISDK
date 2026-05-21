@@ -27,6 +27,7 @@
     <releaseNotes>https://github.com/NetFrameworkAI/NetFrameworkAI-SDK/releases</releaseNotes>
     <copyright>Copyright © 2026</copyright>
     <language>en-US</language>
+    <readme>README.nuget.md</readme>
     <tags>openai anthropic ai agent sdk dotnet-framework-4.0 tool-call mcp skill-manager</tags>
     <dependencies>
       <dependency id="Newtonsoft.Json" version="13.0.1" />
@@ -35,5 +36,6 @@
   <files>
     <file src="bin\Release\NetFrameworkAISDK.dll" target="lib\net40\NetFrameworkAISDK.dll" />
     <file src="bin\Release\NetFrameworkAISDK.xml" target="lib\net40\NetFrameworkAISDK.xml" />
+    <file src="README.nuget.md" target="README.nuget.md" />
   </files>
 </package>
