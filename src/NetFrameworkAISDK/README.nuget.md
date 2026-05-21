@@ -5,7 +5,7 @@
 [![NuGet](https://img.shields.io/nuget/v/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
 
----
+***
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ var result = agent.Run("Hello!");
 Console.WriteLine(result.Result);
 ```
 
----
+***
 
 ## Key Features
 
@@ -77,7 +77,7 @@ if (result.IsSuccess)
 }
 ```
 
-- OpenAI: uses native `response_format` (json_schema + strict mode)
+- OpenAI: uses native `response_format` (json\_schema + strict mode)
 - Anthropic: automatically injects a `structured_output` tool
 
 ### Multi-modal (Image + Text)
@@ -115,17 +115,18 @@ mcp.Initialize();
 // Inject MCP tools as AIFunction instances into the Agent
 ```
 
----
+***
 
 ## Project Links
 
-- GitHub: https://github.com/lishuangquan1987/NetFrameworkAISDK
-- Report issues: https://github.com/lishuangquan1987/NetFrameworkAISDK/issues
-- Full documentation: https://github.com/lishuangquan1987/NetFrameworkAISDK/blob/master/README.md
+- GitHub: <https://github.com/lishuangquan1987/NetFrameworkAISDK>
+- Report issues: <https://github.com/lishuangquan1987/NetFrameworkAISDK/issues>
+- Full documentation: [https://github.com/lishuangquan1987/NetFrameworkAISDK/blob/master/README.MD](https://github.com/lishuangquan1987/NetFrameworkAISDK/blob/master/README.md)
 
----
+***
 
 ## Requirements
 
 - .NET Framework 4.0 or later
 - Newtonsoft.Json 13.0.1 (auto-restored)
+
