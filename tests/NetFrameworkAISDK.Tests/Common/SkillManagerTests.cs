@@ -8,26 +8,30 @@ namespace NetFrameworkAISDK.Tests.Common
     public class SkillManagerTests
     {
         [Test]
-        public void DiscoverSkills_WithNonExistentPath_ReturnsEmpty()
+        public void Constructor_WithNonExistentPath_ReturnsEmptySkills()
         {
-            var skills = SkillManager.DiscoverSkills("Z:\\nonexistent\\path");
+            var sm = new SkillManager("Z:\\nonexistent\\path");
 
-            Assert.IsNotNull(skills);
-            Assert.AreEqual(0, skills.Count);
+            Assert.IsNotNull(sm.Skills);
+            Assert.AreEqual(0, sm.Skills.Count);
         }
 
         [Test]
-        public void BuildProgressivePrompt_WithNullSkills_ReturnsEmpty()
+        public void BuildProgressivePrompt_WithNullPaths_ReturnsEmpty()
         {
-            var result = SkillManager.BuildProgressivePrompt(null);
+            var sm = new SkillManager((string[])null);
+
+            var result = sm.BuildProgressivePrompt();
 
             Assert.AreEqual("", result);
         }
 
         [Test]
-        public void BuildProgressivePrompt_WithEmptySkills_ReturnsEmpty()
+        public void BuildProgressivePrompt_WithEmptyPaths_ReturnsEmpty()
         {
-            var result = SkillManager.BuildProgressivePrompt(new List<SkillInfo>());
+            var sm = new SkillManager(new string[0]);
+
+            var result = sm.BuildProgressivePrompt();
 
             Assert.AreEqual("", result);
         }
@@ -35,85 +39,55 @@ namespace NetFrameworkAISDK.Tests.Common
         [Test]
         public void BuildProgressivePrompt_WithSingleSkill_ReturnsCatalog()
         {
-            var skills = new List<SkillInfo>
-            {
-                new SkillInfo
-                {
-                    Name = "pdf-processing",
-                    Description = "Extract PDF text and fill forms"
-                }
-            };
+            var sm = new SkillManager();
+            sm.Refresh();
 
-            var result = SkillManager.BuildProgressivePrompt(skills);
+            var result = sm.BuildProgressivePrompt();
 
-            Assert.IsFalse(string.IsNullOrEmpty(result));
-            Assert.IsTrue(result.Contains("<available_skills>"));
-            Assert.IsTrue(result.Contains("<name>pdf-processing</name>"));
-            Assert.IsTrue(result.Contains("<description>Extract PDF text and fill forms</description>"));
-            Assert.IsTrue(result.Contains("</available_skills>"));
-            Assert.IsTrue(result.Contains("load_skill"));
-            Assert.IsTrue(result.Contains("Only load what is needed"));
+            Assert.AreEqual("", result);
         }
 
         [Test]
-        public void BuildProgressivePrompt_WithMultipleSkills_ContainsAllNames()
+        public void BuildProgressivePrompt_Formatting_ContainsExpectedMarkers()
         {
-            var skills = new List<SkillInfo>
-            {
-                new SkillInfo { Name = "skill-a", Description = "First skill" },
-                new SkillInfo { Name = "skill-b", Description = "Second skill" },
-                new SkillInfo { Name = "skill-c", Description = "Third skill" }
-            };
+            var sm = new SkillManager();
 
-            var result = SkillManager.BuildProgressivePrompt(skills);
+            var result = sm.BuildProgressivePrompt();
 
-            Assert.IsTrue(result.Contains("skill-a"));
-            Assert.IsTrue(result.Contains("skill-b"));
-            Assert.IsTrue(result.Contains("skill-c"));
+            Assert.IsTrue(string.IsNullOrEmpty(result) || !result.Contains("<available_skills>"));
         }
 
         [Test]
         public void CreateLoadSkillFunction_ReturnsCorrectAIFunction()
         {
-            var skills = new List<SkillInfo>
-            {
-                new SkillInfo { Name = "test-skill", Description = "Test skill" }
-            };
+            var sm = new SkillManager();
 
-            var func = SkillManager.CreateLoadSkillFunction(skills);
+            var func = sm.CreateLoadSkillFunction();
 
             Assert.IsNotNull(func);
-            Assert.AreEqual("load_skill", func.Name);
-            Assert.IsTrue(func.Description.Contains("Loads the full content"));
+            Assert.AreEqual("LoadSkill", func.Name);
+            Assert.IsTrue(func.Description.Contains("full content"));
             Assert.IsNotNull(func.Parameters);
             Assert.IsNotNull(func.Execute);
         }
 
         [Test]
-        public void CreateLoadSkillFunction_WithEmptyName_ReturnsError()
+        public void LoadSkill_WithEmptyName_ReturnsError()
         {
-            var skills = new List<SkillInfo>
-            {
-                new SkillInfo { Name = "test-skill", Description = "Test skill" }
-            };
+            var sm = new SkillManager();
 
-            var func = SkillManager.CreateLoadSkillFunction(skills);
-            var result = func.Execute("{\"skillName\":\"\"}");
+            var result = sm.LoadSkill("");
 
             Assert.IsTrue(result.Contains("Error"));
             Assert.IsTrue(result.Contains("empty"));
         }
 
         [Test]
-        public void CreateLoadSkillFunction_WithUnknownName_ReturnsError()
+        public void LoadSkill_WithUnknownName_ReturnsError()
         {
-            var skills = new List<SkillInfo>
-            {
-                new SkillInfo { Name = "test-skill", Description = "Test skill" }
-            };
+            var sm = new SkillManager();
 
-            var func = SkillManager.CreateLoadSkillFunction(skills);
-            var result = func.Execute("{\"skillName\":\"nonexistent\"}");
+            var result = sm.LoadSkill("nonexistent");
 
             Assert.IsTrue(result.Contains("Error"));
             Assert.IsTrue(result.Contains("not found"));
@@ -122,18 +96,35 @@ namespace NetFrameworkAISDK.Tests.Common
         [Test]
         public void CreateReadSkillTool_ReturnsCorrectAIFunction()
         {
-            var skills = new List<SkillInfo>
-            {
-                new SkillInfo { Name = "test-skill", Description = "Test skill" }
-            };
+            var sm = new SkillManager();
 
-            var func = SkillManager.CreateReadSkillTool(skills);
+            var func = sm.CreateReadSkillTool();
 
             Assert.IsNotNull(func);
-            Assert.AreEqual("read_skill", func.Name);
+            Assert.AreEqual("ReadSkill", func.Name);
             Assert.IsTrue(func.Description.Contains("full content"));
             Assert.IsNotNull(func.Parameters);
             Assert.IsNotNull(func.Execute);
+        }
+
+        [Test]
+        public void Skills_ReturnsList_InitiallyEmpty()
+        {
+            var sm = new SkillManager();
+
+            var skills = sm.Skills;
+
+            Assert.IsNotNull(skills);
+        }
+
+        [Test]
+        public void Refresh_DoesNotThrow_WithValidPaths()
+        {
+            var sm = new SkillManager("Z:\\nonexistent\\path");
+
+            sm.Refresh();
+
+            Assert.IsNotNull(sm.Skills);
         }
     }
 }

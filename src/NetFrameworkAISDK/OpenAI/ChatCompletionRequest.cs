@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NetFrameworkAISDK.Common;
 
 namespace NetFrameworkAISDK.OpenAI
 {

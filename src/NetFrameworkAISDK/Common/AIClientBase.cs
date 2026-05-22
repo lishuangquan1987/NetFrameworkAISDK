@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using NetFrameworkAISDK.OpenAI;
 
 namespace NetFrameworkAISDK.Common
 {
@@ -71,7 +70,7 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
-        /// 构建 OpenAI ToolDefinition 列表，合并全局工具和对话选项中的临时工具
+        /// 构建 ToolDefinition 列表，合并全局工具和对话选项中的临时工具
         /// </summary>
         /// <param name="options">对话选项</param>
         /// <returns>工具定义列表，无工具时返回 null</returns>
@@ -107,38 +106,6 @@ namespace NetFrameworkAISDK.Common
             }
 
             return toolDefs;
-        }
-
-        /// <summary>
-        /// 按名称查找已注册的工具函数
-        /// </summary>
-        /// <param name="name">工具名称</param>
-        /// <returns>找到的 AIFunction，未找到返回 null</returns>
-        protected AIFunction FindTool(string name)
-        {
-            if (string.IsNullOrEmpty(name))
-            {
-                return null;
-            }
-            AIFunction result;
-            _toolMap.TryGetValue(name, out result);
-            return result;
-        }
-
-        /// <summary>
-        /// 按名称执行已注册的工具函数
-        /// </summary>
-        /// <param name="functionName">函数名称</param>
-        /// <param name="functionArgs">函数参数 JSON 字符串</param>
-        /// <returns>函数执行结果</returns>
-        public string ExecuteTool(string functionName, string functionArgs)
-        {
-            var function = FindTool(functionName);
-            if (function != null)
-            {
-                return function.Execute(functionArgs);
-            }
-            return "Error: Tool '" + functionName + "' not found.";
         }
 
         /// <summary>

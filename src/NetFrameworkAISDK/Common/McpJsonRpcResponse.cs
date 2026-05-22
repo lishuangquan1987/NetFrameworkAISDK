@@ -16,11 +16,5 @@ namespace NetFrameworkAISDK.Common
 
         /// <summary>失败时的错误信息</summary>
         public McpJsonRpcError Error { get; set; }
-
-        /// <summary>是否包含错误</summary>
-        public bool HasError
-        {
-            get { return Error != null; }
-        }
     }
 }

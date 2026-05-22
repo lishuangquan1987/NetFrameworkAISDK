@@ -1,6 +1,27 @@
 namespace NetFrameworkAISDK.Anthropic
 {
     /// <summary>
+    /// Anthropic 图像源对象。序列化为 {"type":"base64","media_type":"...","data":"..."}
+    /// </summary>
+    public class ImageSource
+    {
+        /// <summary>
+        /// 源类型（通常为 "base64"）
+        /// </summary>
+        public string Type { get; set; }
+
+        /// <summary>
+        /// MIME 类型（如 "image/png", "image/jpeg"）
+        /// </summary>
+        public string MediaType { get; set; }
+
+        /// <summary>
+        /// base64 编码的图像数据（不含 data:xxx;base64, 前缀）
+        /// </summary>
+        public string Data { get; set; }
+    }
+
+    /// <summary>
     /// Anthropic 内容块，支持文本、图像、工具调用和工具结果
     /// </summary>
     public class ContentBlock
@@ -21,14 +42,9 @@ namespace NetFrameworkAISDK.Anthropic
         public string Content { get; set; }
 
         /// <summary>
-        /// 图像数据（base64 编码，image 类型时使用）
+        /// 图像源（image 类型时使用），包含 type/media_type/data 子字段
         /// </summary>
-        public string Source { get; set; }
-
-        /// <summary>
-        /// 图像媒体类型（image 类型时使用，如 "image/jpeg"）
-        /// </summary>
-        public string MediaType { get; set; }
+        public ImageSource Source { get; set; }
 
         /// <summary>
         /// 工具使用唯一标识符（tool_use / tool_result 类型时使用）

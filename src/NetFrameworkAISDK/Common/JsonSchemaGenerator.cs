@@ -1,14 +1,17 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Newtonsoft.Json.Serialization;
 
 namespace NetFrameworkAISDK.Common
 {
     /// <summary>
-    /// JSON Schema 生成器，从 .NET 类型通过反射自动生成 JSON Schema
+    /// JSON Schema 生成器，从 .NET 类型通过反射自动生成 JSON Schema。
+    /// 属性名自动转换为 snake_case 以匹配项目序列化策略。
     /// </summary>
     public static class JsonSchemaGenerator
     {
+        private static readonly SnakeCaseNamingStrategy _naming = new SnakeCaseNamingStrategy();
         /// <summary>
         /// 从 .NET 类型生成 JSON Schema 字符串
         /// </summary>
@@ -140,9 +143,9 @@ namespace NetFrameworkAISDK.Common
                 var propSchema = BuildSchema(prop.PropertyType);
                 if (propSchema != null)
                 {
-                    var desc = propSchema;
-                    properties[prop.Name] = desc;
-                    required.Add(prop.Name);
+                    var name = _naming.GetPropertyName(prop.Name, false);
+                    properties[name] = propSchema;
+                    required.Add(name);
                 }
             }
 

@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using NetFrameworkAISDK.OpenAI;
+using NetFrameworkAISDK.Common;
 
 namespace NetFrameworkAISDK.Anthropic
 {

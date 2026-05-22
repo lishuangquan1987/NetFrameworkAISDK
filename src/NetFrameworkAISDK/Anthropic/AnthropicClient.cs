@@ -1,5 +1,4 @@
 using NetFrameworkAISDK.Common;
-using NetFrameworkAISDK.OpenAI;
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -160,6 +159,19 @@ namespace NetFrameworkAISDK.Anthropic
             var toolDefs = BuildToolDefinitions(options);
             int maxTokens = options.MaxTokens.HasValue ? options.MaxTokens.Value : 1024;
 
+            if (options.ResponseFormat != null)
+            {
+                if (toolDefs == null)
+                {
+                    toolDefs = new List<ToolDefinition>();
+                }
+                var structuredTool = BuildStructuredOutputTool(options.ResponseFormat);
+                if (structuredTool != null)
+                {
+                    toolDefs.Add(structuredTool);
+                }
+            }
+
             var contentBlockStates = new Dictionary<int, ContentBlockState>();
             string modelName = null;
 
@@ -243,7 +255,7 @@ namespace NetFrameworkAISDK.Anthropic
                             }
                             else if (state.Type == "text")
                             {
-                                convResp.Content = state.TextBuilder.ToString();
+                                convResp.Content = null;
                             }
                         }
                     }
@@ -369,24 +381,24 @@ namespace NetFrameworkAISDK.Anthropic
                         }
                         else if (cp.Type == ContentType.Image)
                         {
+                            var source = new ImageSource();
                             if (!string.IsNullOrEmpty(cp.ImageUrl))
                             {
-                                blocks.Add(new ContentBlock
-                                {
-                                    Type = "image",
-                                    Source = cp.ImageUrl,
-                                    MediaType = !string.IsNullOrEmpty(cp.MediaType) ? cp.MediaType : "image/png"
-                                });
+                                source.Type = "url";
+                                source.Data = cp.ImageUrl;
+                                source.MediaType = !string.IsNullOrEmpty(cp.MediaType) ? cp.MediaType : "image/png";
                             }
                             else if (!string.IsNullOrEmpty(cp.ImageBase64))
                             {
-                                blocks.Add(new ContentBlock
-                                {
-                                    Type = "image",
-                                    Source = cp.ImageBase64,
-                                    MediaType = !string.IsNullOrEmpty(cp.MediaType) ? cp.MediaType : "image/png"
-                                });
+                                source.Type = "base64";
+                                source.Data = cp.ImageBase64;
+                                source.MediaType = !string.IsNullOrEmpty(cp.MediaType) ? cp.MediaType : "image/png";
                             }
+                            blocks.Add(new ContentBlock
+                            {
+                                Type = "image",
+                                Source = source
+                            });
                         }
                     }
                     result.Add(new AnthropicMessage
@@ -473,7 +485,7 @@ namespace NetFrameworkAISDK.Anthropic
                 return null;
             }
 
-            var schemaObj = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, object>>(format.JsonSchema);
+            var schemaObj = JsonHelper.Deserialize<Dictionary<string, object>>(format.JsonSchema);
             var toolDef = new ToolDefinition
             {
                 Type = "function",

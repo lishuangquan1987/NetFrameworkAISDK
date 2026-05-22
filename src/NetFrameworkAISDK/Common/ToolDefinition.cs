@@ -1,7 +1,7 @@
-namespace NetFrameworkAISDK.OpenAI
+namespace NetFrameworkAISDK.Common
 {
     /// <summary>
-    /// OpenAI 工具定义，描述可被模型调用的工具
+    /// 工具定义，描述可被模型调用的工具
     /// </summary>
     public class ToolDefinition
     {

@@ -1,4 +1,4 @@
-# NetFrameworkAI SDK - 关键模式总结
+# NetFrameworkAISDK - 关键模式总结
 
 ## 1. JSON 序列化：必须使用 snake_case
 
@@ -41,32 +41,18 @@ static HttpClientBase()
 
 ---
 
-## 3. HTTP 请求：Flurl URL 构建 + HttpWebRequest
+## 3. HTTP 请求：HttpWebRequest
 
-**场景**：Flurl.Http 不支持 .NET 4.0（仅 net45+）
-
-**正确做法**：使用 Flurl.dll 的 `Url` 类构建 URL，用 `HttpWebRequest` 发送请求
+.NET 4.0 使用原生 `HttpWebRequest` 进行 HTTP 通信。
 
 ```csharp
-using Flurl;
-
-// 存储为 Url 对象
-protected readonly Url BaseUrl;
-
-// 构建 URL
 private string BuildUrl(string endpoint)
 {
-    return new Url(BaseUrl.ToString()).AppendPathSegment(endpoint).ToString();
+    var baseUri = new Uri(BaseUrl + "/");
+    return new Uri(baseUri, endpoint.TrimStart('/')).ToString();
 }
 
-// 构建带查询参数的 URL
-private string BuildUrl(string endpoint, object queryParams)
-{
-    return new Url(BaseUrl.ToString())
-        .AppendPathSegment(endpoint)
-        .SetQueryParams(queryParams)
-        .ToString();
-}
+HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
 ```
 
 ---

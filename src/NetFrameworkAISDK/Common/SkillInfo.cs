@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
 namespace NetFrameworkAISDK.Common
@@ -17,11 +16,6 @@ namespace NetFrameworkAISDK.Common
         /// 技能描述（来自 SKILL.md 的 description 字段）
         /// </summary>
         public string Description { get; set; }
-
-        /// <summary>
-        /// 技能文件所在目录路径
-        /// </summary>
-        public string DirectoryPath { get; set; }
 
         /// <summary>
         /// SKILL.md 文件的完整路径

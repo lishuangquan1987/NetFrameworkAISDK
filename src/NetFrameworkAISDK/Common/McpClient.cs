@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace NetFrameworkAISDK.Common
 {
@@ -20,6 +19,7 @@ namespace NetFrameworkAISDK.Common
         private int _requestId;
         private bool _initialized;
         private bool _disposed;
+        private bool _aborted;
         private int _timeoutMilliseconds;
         private readonly object _sendLock;
 
@@ -251,36 +251,59 @@ namespace NetFrameworkAISDK.Common
             if (!_disposed)
             {
                 _disposed = true;
+                _aborted = true;
                 Shutdown();
-                if (_stdin != null) { _stdin.Close(); }
-                if (_stdout != null) { _stdout.Close(); }
+                if (_stdin != null) { try { _stdin.Close(); } catch { } }
+                if (_stdout != null) { try { _stdout.Close(); } catch { } }
                 if (_process != null)
                 {
-                    if (!_process.HasExited)
+                    try
                     {
-                        _process.Kill();
+                        if (!_process.HasExited)
+                        {
+                            _process.Kill();
+                        }
                     }
-                    _process.Dispose();
+                    catch { }
+                    try { _process.Dispose(); } catch { }
                 }
             }
         }
 
         /// <summary>
         /// 从标准输出读取一行，带超时保护。
-        /// 使用轮询方式避免 Task 泄露，每个轮询间隔 50ms。
+        /// 使用独立线程 + Join 超时，避免 Task 泄漏问题。
         /// </summary>
         /// <param name="timeoutMs">超时毫秒数</param>
         /// <returns>读取的行，超时返回 null</returns>
         private string ReadLineWithTimeout(int timeoutMs)
         {
-            var task = Task.Factory.StartNew(new Func<string>(() =>
+            if (_aborted)
             {
-                return _stdout.ReadLine();
-            }));
-            if (task.Wait(timeoutMs))
-            {
-                return task.Result;
+                return null;
             }
+
+            string result = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    result = _stdout.ReadLine();
+                }
+                catch (Exception)
+                {
+                    result = null;
+                }
+            });
+            thread.IsBackground = true;
+            thread.Start();
+
+            if (thread.Join(timeoutMs))
+            {
+                return result;
+            }
+
+            _aborted = true;
             return null;
         }
 
@@ -311,6 +334,7 @@ namespace NetFrameworkAISDK.Common
                 string responseLine = ReadLineWithTimeout(_timeoutMilliseconds);
                 if (responseLine == null)
                 {
+                    _aborted = true;
                     return new ApiResponse<object>
                     {
                         Error = new ApiError("MCP request timed out after " + _timeoutMilliseconds + "ms")

@@ -4,11 +4,10 @@
 
 1. **命名空间/项目结构**：项目的主要命名空间是什么？项目结构如何规划？（例如：是否分为 OpenAI、Anthropic、Common 等文件夹/项目？）
 
-回复：命名空间：**NetFrameworkAI**，**NetFrameworkAI.OpenAI**,**NetFrameworkAI.Anthropic**等等
+回复：命名空间：**NetFrameworkAISDK**，**NetFrameworkAISDK.OpenAI**,**NetFrameworkAISDK.Anthropic**等等
 
-1. **Flurl 版本**：要求使用 Flurl 进行 HTTP 请求，但 .NET Framework 4.0 支持的 Flurl 版本是多少？是否需要使用兼容 .NET Framework 4.0 的旧版本？
-
-   回复：使用兼容.NET Framework 4.0的旧版本
+1. **Flurl 版本**：原计划使用 Flurl 进行 HTTP 请求，但 .NET Framework 4.0 兼容的 Flurl 版本受限。
+> 最终方案：使用原生 HttpWebRequest（已从 AGENTS.md 移除 Flurl 要求）。
 
 2. **JSON 序列化库**：要求将 JSON 封装为类，拒绝字符串拼接。那么使用哪个 JSON 序列化库？（Newtonsoft.Json 是 .NET Framework 4.0 时代最常用的选择）
 

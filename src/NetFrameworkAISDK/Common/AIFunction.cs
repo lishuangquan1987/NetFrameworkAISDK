@@ -1,4 +1,3 @@
-using NetFrameworkAISDK.OpenAI;
 using System;
 using System.Collections.Generic;
 

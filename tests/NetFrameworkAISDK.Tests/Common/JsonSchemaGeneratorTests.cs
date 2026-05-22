@@ -59,9 +59,9 @@ namespace NetFrameworkAISDK.Tests.Common
             var schema = JsonSchemaGenerator.GenerateFromType(typeof(SimpleType), "simple_type");
 
             Assert.IsTrue(schema.Contains("\"type\":\"object\""));
-            Assert.IsTrue(schema.Contains("\"Name\""));
-            Assert.IsTrue(schema.Contains("\"Age\""));
-            Assert.IsTrue(schema.Contains("\"required\":[\"Name\",\"Age\"]"));
+            Assert.IsTrue(schema.Contains("\"name\""));
+            Assert.IsTrue(schema.Contains("\"age\""));
+            Assert.IsTrue(schema.Contains("\"required\":[\"name\",\"age\"]"));
             Assert.IsTrue(schema.Contains("\"additionalProperties\":false"));
         }
 
@@ -70,11 +70,11 @@ namespace NetFrameworkAISDK.Tests.Common
         {
             var schema = JsonSchemaGenerator.GenerateFromType(typeof(WeatherInfo), "weather_info");
 
-            Assert.IsTrue(schema.Contains("\"City\""));
+            Assert.IsTrue(schema.Contains("\"city\""));
             Assert.IsTrue(schema.Contains("\"type\":\"string\""));
-            Assert.IsTrue(schema.Contains("\"Temperature\""));
+            Assert.IsTrue(schema.Contains("\"temperature\""));
             Assert.IsTrue(schema.Contains("\"type\":\"number\""));
-            Assert.IsTrue(schema.Contains("\"Condition\""));
+            Assert.IsTrue(schema.Contains("\"condition\""));
         }
 
         [Test]
@@ -82,7 +82,7 @@ namespace NetFrameworkAISDK.Tests.Common
         {
             var schema = JsonSchemaGenerator.GenerateFromType(typeof(WeatherInfo), "weather_info");
 
-            Assert.IsTrue(schema.Contains("\"required\":[\"City\",\"Temperature\",\"Condition\"]"));
+            Assert.IsTrue(schema.Contains("\"required\":[\"city\",\"temperature\",\"condition\"]"));
         }
 
         [Test]
@@ -90,7 +90,7 @@ namespace NetFrameworkAISDK.Tests.Common
         {
             var schema = JsonSchemaGenerator.GenerateFromType(typeof(EnumType), "enum_type");
 
-            Assert.IsTrue(schema.Contains("\"FavoriteColor\""));
+            Assert.IsTrue(schema.Contains("\"favorite_color\""));
             Assert.IsTrue(schema.Contains("\"enum\":[\"Red\",\"Green\",\"Blue\"]"));
         }
 
@@ -99,8 +99,8 @@ namespace NetFrameworkAISDK.Tests.Common
         {
             var schema = JsonSchemaGenerator.GenerateFromType(typeof(NestedType), "nested_type");
 
-            Assert.IsTrue(schema.Contains("\"HomeAddress\""));
-            Assert.IsTrue(schema.Contains("\"Street\""));
+            Assert.IsTrue(schema.Contains("\"home_address\""));
+            Assert.IsTrue(schema.Contains("\"street\""));
         }
 
         [Test]
@@ -108,7 +108,7 @@ namespace NetFrameworkAISDK.Tests.Common
         {
             var schema = JsonSchemaGenerator.GenerateFromType(typeof(ListType), "list_type");
 
-            Assert.IsTrue(schema.Contains("\"Tags\""));
+            Assert.IsTrue(schema.Contains("\"tags\""));
             Assert.IsTrue(schema.Contains("\"type\":\"array\""));
             Assert.IsTrue(schema.Contains("\"items\""));
         }
@@ -118,7 +118,7 @@ namespace NetFrameworkAISDK.Tests.Common
         {
             var schema = JsonSchemaGenerator.GenerateFromType(typeof(ArrayType), "array_type");
 
-            Assert.IsTrue(schema.Contains("\"Scores\""));
+            Assert.IsTrue(schema.Contains("\"scores\""));
             Assert.IsTrue(schema.Contains("\"type\":\"integer\""));
             Assert.IsTrue(schema.Contains("\"items\""));
         }

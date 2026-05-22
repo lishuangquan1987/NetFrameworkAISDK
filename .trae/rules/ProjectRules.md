@@ -36,12 +36,12 @@
 参考 Microsoft Agent Framework:https://github.com/microsoft/agent-framework/tree/main/dotnet
 
 ### 项目基本信息
-- **项目名称**：NetFrameworkAI
+- **项目名称**：NetFrameworkAISDK
 - **项目类型**：类库项目（Class Library）
 - **主要命名空间**：
-  - `NetFrameworkAI` - 核心命名空间
-  - `NetFrameworkAI.OpenAI` - OpenAI 相关功能
-  - `NetFrameworkAI.Anthropic` - Anthropic 相关功能
+  - `NetFrameworkAISDK` - 核心命名空间
+  - `NetFrameworkAISDK.OpenAI` - OpenAI 相关功能
+  - `NetFrameworkAISDK.Anthropic` - Anthropic 相关功能
 
 ### 技术栈约束
 - **.NET Framework 4.0+ 兼容性**：所有代码必须兼容 .NET Framework 4.0 及以上版本
@@ -49,7 +49,7 @@
   - 禁止使用 `IAsyncEnumerable` 和 `await foreach`（C# 8.0 特性）
   - 使用 .NET Framework 4.0 支持的 API
 
-- **HTTP 请求**：必须使用 Flurl 库进行 HTTP 请求（兼容 .NET Framework 4.0 的版本）
+- **HTTP 请求**：使用 HttpWebRequest 进行 HTTP 请求（兼容 .NET Framework 4.0）
 
 - **JSON 处理**：
   - 所有请求/响应 JSON 必须封装为强类型类
@@ -87,7 +87,7 @@
 
 每次完成代码修改后，验证以下检查项：
 1. 代码兼容 .NET Framework 4.0
-2. HTTP 请求使用 Flurl
+2. HTTP 请求使用 HttpWebRequest
 3. JSON 处理使用强类型类，无字符串拼接
 4. 遵循现有代码风格
 5. 没有添加未被要求的功能
@@ -95,4 +95,4 @@
 7. API 密钥通过构造函数传入
 8. 流式回复使用 `Action<T>` 回调
 9. 错误处理返回错误对象，不抛出异常
-10. 命名空间使用 `NetFrameworkAI.*` 格式
+10. 命名空间使用 `NetFrameworkAISDK.*` 格式

@@ -84,7 +84,8 @@ namespace NetFrameworkAISDK.OpenAI
             Action<ApiError> onError,
             double? temperature = null,
             int? maxTokens = null,
-            List<ToolDefinition> tools = null)
+            List<ToolDefinition> tools = null,
+            OpenAiResponseFormat responseFormat = null)
         {
             var request = new ChatCompletionRequest
             {
@@ -93,6 +94,7 @@ namespace NetFrameworkAISDK.OpenAI
                 Temperature = temperature,
                 MaxTokens = maxTokens,
                 Tools = tools,
+                ResponseFormat = responseFormat,
                 Stream = true
             };
 
@@ -119,7 +121,7 @@ namespace NetFrameworkAISDK.OpenAI
 
             if (options.ResponseFormat != null)
             {
-                var schemaObj = Newtonsoft.Json.JsonConvert.DeserializeObject<object>(options.ResponseFormat.JsonSchema);
+                var schemaObj = JsonHelper.Deserialize<object>(options.ResponseFormat.JsonSchema);
                 request.ResponseFormat = new OpenAiResponseFormat
                 {
                     Type = options.ResponseFormat.Type,
@@ -154,6 +156,22 @@ namespace NetFrameworkAISDK.OpenAI
         {
             var openAiMessages = ConvertToOpenAiMessages(messages, options);
             var toolDefs = BuildToolDefinitions(options);
+
+            OpenAiResponseFormat responseFormat = null;
+            if (options.ResponseFormat != null)
+            {
+                var schemaObj = JsonHelper.Deserialize<object>(options.ResponseFormat.JsonSchema);
+                responseFormat = new OpenAiResponseFormat
+                {
+                    Type = options.ResponseFormat.Type,
+                    JsonSchema = new JsonSchemaObject
+                    {
+                        Name = options.ResponseFormat.SchemaName,
+                        Strict = options.ResponseFormat.Strict,
+                        Schema = schemaObj
+                    }
+                };
+            }
 
             CreateChatCompletionStream(
                 options.Model,
@@ -194,7 +212,8 @@ namespace NetFrameworkAISDK.OpenAI
                 onError,
                 options.Temperature,
                 options.MaxTokens,
-                toolDefs);
+                toolDefs,
+                responseFormat);
         }
 
         /// <summary>
@@ -230,7 +249,7 @@ namespace NetFrameworkAISDK.OpenAI
                         parts.Add(new ImageContentPart
                         {
                             Type = "text",
-                            Image = new ImageDetail { Url = msg.Content }
+                            Text = msg.Content
                         });
                     }
                     foreach (var cp in msg.ContentParts)
@@ -240,7 +259,7 @@ namespace NetFrameworkAISDK.OpenAI
                             parts.Add(new ImageContentPart
                             {
                                 Type = "text",
-                                Image = new ImageDetail { Url = cp.Text }
+                                Text = cp.Text
                             });
                         }
                         else if (cp.Type == ContentType.Image)

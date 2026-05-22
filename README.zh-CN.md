@@ -1,4 +1,4 @@
-# NetFrameworkAI
+# NetFrameworkAISDK
 
 > **面向 .NET Framework 4.0+ 的 OpenAI & Anthropic SDK** — AI Agent、工具调用、结构化输出、MCP 客户端、技能管理。
 
@@ -9,7 +9,7 @@
 
 [🇬🇧 English Documentation](README.md)
 
-NetFrameworkAI 为传统的 .NET Framework 4.0+ 项目带来了现代化的 AI 能力。它在 OpenAI 和 Anthropic API 之上提供了统一接口，并内置了自动处理多轮工具调用、结构化 JSON 输出、技能管理的 AI Agent。
+NetFrameworkAISDK 为传统的 .NET Framework 4.0+ 项目带来了现代化的 AI 能力。它在 OpenAI 和 Anthropic API 之上提供了统一接口，并内置了自动处理多轮工具调用、结构化 JSON 输出、技能管理的 AI Agent。
 
 ---
 
@@ -230,21 +230,20 @@ MAF 风格的技能加载 —— 只有技能摘要进入 system prompt，完整
 var agent = AIAgent.CreateWithDefaults(
     client, "gpt-4o",
     "你是一个编程助手。",
-    "./skills",                    // 技能目录（自动发现）
+    new string[] { "./skills" },   // 技能目录数组（自动发现）
     new[] { myCustomTool });       // 额外工具
 ```
 
 或手动方式：
 
 ```csharp
-var skills = SkillManager.DiscoverSkills("./skills");
-var prompt = SkillManager.BuildProgressivePrompt(skills);
+var sm = new SkillManager("./skills");
+var prompt = sm.BuildProgressivePrompt();
 
 var agent = new AIAgent(client, "gpt-4o", prompt, new[]
 {
-    SkillManager.CreateLoadSkillFunction(skills),
-    SkillManager.CreateReadSkillTool(skills),
-    SkillManager.CreateBuiltInTools()
+    sm.CreateLoadSkillFunction(),
+    sm.CreateReadSkillTool()
 });
 ```
 

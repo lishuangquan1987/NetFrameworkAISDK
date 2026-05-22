@@ -22,10 +22,11 @@ namespace NetFrameworkAISDK.Samples
             Console.WriteLine("------------------------------------------------------------------------");
             Console.WriteLine();
             Console.WriteLine("=== Protocol ===");
-            Console.WriteLine("  1. System prompt: <available_skills> with names + descriptions only");
-            Console.WriteLine("  2. Tools injected: load_skill, read_file, write_file, grep, ...");
-            Console.WriteLine("  3. LLM calls load_skill('xxx') -> gets full instructions");
-            Console.WriteLine("  4. LLM calls file tools -> reads/writes files as needed");
+            Console.WriteLine("  1. AIAgent auto-creates SkillManager and injects skill tools");
+            Console.WriteLine("  2. System prompt: <available_skills> with names + descriptions only");
+            Console.WriteLine("  3. Tools injected: load_skill, read_file, write_file, grep, ...");
+            Console.WriteLine("  4. LLM calls load_skill('xxx') -> gets full instructions");
+            Console.WriteLine("  5. Runtime: agent.SkillManager.AddDirectory() for dynamic skills");
             Console.WriteLine("------------------------------------------------------------------------");
 
             Console.WriteLine("\nEnter the skills directory path.");
@@ -39,61 +40,44 @@ namespace NetFrameworkAISDK.Samples
                 return;
             }
 
-            Console.WriteLine("\nStep 1: Discover Skills");
+            Console.WriteLine("\nStep 1: AIAgent auto-discovers and integrates skills");
             Console.WriteLine("----------------------------------------------------------------");
-            Console.WriteLine("SkillManager scans for directories containing SKILL.md.");
-            var skills = SkillManager.DiscoverSkills(directoryPath);
+            Console.WriteLine("AIAgent creates SkillManager internally with skillsDirectories.");
+            Console.WriteLine("Skill catalog auto-injected into system prompt.");
 
-            if (skills == null || skills.Count == 0)
+            Console.WriteLine("\nStep 2: Inspect via agent.SkillManager");
+            Console.WriteLine("----------------------------------------------------------------");
+            Console.WriteLine("BuildProgressivePrompt() generates XML catalog:");
+            var sm = new SkillManager(directoryPath);
+            var skills = sm.Skills;
+            if (skills.Count > 0)
             {
-                Console.WriteLine("No skills found. Using demo mode with skill catalog only.");
-                Console.WriteLine("Create SKILL.md files to see them here.");
+                Console.WriteLine("Found " + skills.Count + " skill(s):");
+                foreach (var skill in skills)
+                {
+                    Console.WriteLine("  " + skill.Name + ": " + skill.Description);
+                }
             }
             else
             {
-                Console.WriteLine("Found " + skills.Count + " skill(s):");
-                int idx = 1;
-                foreach (var skill in skills)
-                {
-                    Console.WriteLine("  [" + idx + "] " + skill.Name + ": " + skill.Description);
-                    idx++;
-                }
+                Console.WriteLine("No skills found.");
             }
-
-            Console.WriteLine("\nStep 2: Build Progressive Prompt (catalog only, NO full bodies)");
-            Console.WriteLine("----------------------------------------------------------------");
-            Console.WriteLine("BuildProgressivePrompt() generates XML catalog:");
-            string prompt = SkillManager.BuildProgressivePrompt(skills);
-            Console.WriteLine(prompt);
+            Console.WriteLine();
+            Console.WriteLine(sm.BuildProgressivePrompt());
 
             Console.WriteLine("\nStep 3: Common Agent Tools");
             Console.WriteLine("----------------------------------------------------------------");
-            Console.WriteLine("AgentTools.CreateDefaultTools() provides these tools:");
-            Console.WriteLine("  - ReadFile(path)          Read file contents");
-            Console.WriteLine("  - WriteFile(path,content) Write file contents");
-            Console.WriteLine("  - ListDirectory(path)     List directory entries");
-            Console.WriteLine("  - Grep(pattern,path)      Search text with regex");
-            Console.WriteLine("  - Glob(pattern)           Find files by pattern");
-            Console.WriteLine("  - DeleteFile(path)        Delete a file");
-            Console.WriteLine("  - MakeDirectory(path)     Create directory");
-            Console.WriteLine("  - RenameFile(old,new)     Rename file/directory");
-            Console.WriteLine("  - GetFileInfo(path)       Get file information");
-            Console.WriteLine("  - CopyFile(src,dest)      Copy file");
-            Console.WriteLine("  - MoveFile(src,dest)      Move file");
-            Console.WriteLine("  - GetEnvironmentVariable  Get env variable");
-            Console.WriteLine("  - RunCommand(cmd)         Execute shell command");
-            Console.WriteLine();
-            Console.WriteLine("These tools give the LLM file system access, like Claude Code / Codex CLI.");
+            Console.WriteLine("AgentTools.CreateDefaultTools() provides file system tools.");
+            Console.WriteLine("  read_file, write_file, list_directory, grep, glob, ...");
 
             Console.WriteLine("\nStep 4: Test with Provider");
             Console.WriteLine("----------------------------------------------------------------");
-            Console.WriteLine("Available options:");
-            Console.WriteLine("  1. OpenAI (progresssive + load_skill + common tools)");
-            Console.WriteLine("  2. Anthropic (system parameter + load_skill + common tools)");
+            Console.WriteLine("  1. OpenAI (auto-integration via AIAgent constructor)");
+            Console.WriteLine("  2. Anthropic (auto-integration via AIAgent constructor)");
 
             if (skills.Count > 0)
             {
-                Console.WriteLine("  3. Show skill-specific 'read_skill' tool");
+                Console.WriteLine("  3. Show skill 'read_skill' via agent.SkillManager");
             }
 
             Console.WriteLine("  0. Skip");
@@ -102,11 +86,11 @@ namespace NetFrameworkAISDK.Samples
 
             if (providerChoice == "1")
             {
-                TestWithOpenAI(skills, prompt);
+                TestWithOpenAI(directoryPath, skills);
             }
             else if (providerChoice == "2")
             {
-                TestWithAnthropic(skills, prompt);
+                TestWithAnthropic(directoryPath, skills);
             }
             else if (providerChoice == "3" && skills.Count > 0)
             {
@@ -118,7 +102,7 @@ namespace NetFrameworkAISDK.Samples
             }
         }
 
-        private void TestWithOpenAI(List<SkillInfo> skills, string catalogPrompt)
+        private void TestWithOpenAI(string directoryPath, List<SkillInfo> skills)
         {
             var config = SampleConfig.ReadFromConsole("OpenAI", "https://api.openai.com/v1", "gpt-4o",
                 includeSystemPrompt: true);
@@ -138,50 +122,22 @@ namespace NetFrameworkAISDK.Samples
                 client = new OpenAIClient(config.ApiKey);
             }
 
-            string instructions = catalogPrompt;
-            if (!string.IsNullOrEmpty(config.SystemPrompt))
-            {
-                instructions = config.SystemPrompt + "\n\n" + catalogPrompt;
-            }
+            string instructions = config.SystemPrompt ?? "You are a helpful assistant.";
+            var agent = new Common.AIAgent(client, config.Model, instructions,
+                AgentTools.CreateDefaultTools(), true,
+                new string[] { directoryPath });
 
-            var tools = AgentTools.CreateDefaultTools();
-            tools.Add(SkillManager.CreateLoadSkillFunction(skills));
+            Console.WriteLine("\nAIAgent created with skills auto-integrated.");
+            Console.WriteLine("  agent.SkillManager access: " + (agent.SkillManager != null ? "available" : "null"));
+            Console.WriteLine("  agent.SkillManager.Skills.Count: " + agent.SkillManager.Skills.Count);
+            Console.WriteLine("  Runtime add: agent.SkillManager.AddDirectory(\"path\")");
+            Console.WriteLine("  Runtime remove: agent.SkillManager.RemoveDirectory(\"path\")");
+            Console.WriteLine("  Force refresh: agent.SkillManager.Refresh()");
 
-            var agent = new Common.AIAgent(client, config.Model, instructions, tools);
-
-            Console.WriteLine("\nProgressive disclosure mode. Tools available:");
-            Console.WriteLine("  read_file, write_file, list_directory, grep, glob, load_skill");
-            Console.WriteLine("\nEnter your message (type 'exit' to quit):");
-            Console.Write("You: ");
-            string userInput = Console.ReadLine();
-
-            while (userInput != "exit")
-            {
-                Console.Write("\nAssistant: ");
-
-                var response = agent.Run(userInput, onToolCall: (e) =>
-                {
-                    Console.WriteLine("\n>>> Tool: " + e.FunctionName);
-                    Console.WriteLine(">>> Args: " + e.FunctionArguments);
-                    Console.WriteLine(">>> Result: " + e.Result);
-                });
-
-                if (response.IsSuccess)
-                {
-                    Console.WriteLine(response.Result);
-                }
-                else
-                {
-                    Console.WriteLine("Error: " + response.Error.Message);
-                }
-
-                Console.WriteLine("\nEnter your message (type 'exit' to quit):");
-                Console.Write("You: ");
-                userInput = Console.ReadLine();
-            }
+            RunInteractiveLoop(agent);
         }
 
-        private void TestWithAnthropic(List<SkillInfo> skills, string catalogPrompt)
+        private void TestWithAnthropic(string directoryPath, List<SkillInfo> skills)
         {
             var config = SampleConfig.ReadFromConsole("Anthropic", "https://api.anthropic.com/v1",
                 "claude-3-sonnet-20240229", 1024, null, true);
@@ -201,19 +157,19 @@ namespace NetFrameworkAISDK.Samples
                 client = new AnthropicClient(config.ApiKey);
             }
 
-            string instructions = catalogPrompt;
-            if (!string.IsNullOrEmpty(config.SystemPrompt))
-            {
-                instructions = config.SystemPrompt + "\n\n" + catalogPrompt;
-            }
+            string instructions = config.SystemPrompt ?? "You are a helpful assistant.";
+            var agent = new Common.AIAgent(client, config.Model, instructions,
+                AgentTools.CreateDefaultTools(), true,
+                new string[] { directoryPath });
 
-            var tools = AgentTools.CreateDefaultTools();
-            tools.Add(SkillManager.CreateLoadSkillFunction(skills));
+            Console.WriteLine("\nAIAgent created with skills auto-integrated.");
+            Console.WriteLine("  agent.SkillManager access: " + (agent.SkillManager != null ? "available" : "null"));
 
-            var agent = new Common.AIAgent(client, config.Model, instructions, tools);
+            RunInteractiveLoop(agent);
+        }
 
-            Console.WriteLine("\nProgressive disclosure mode. Tools available:");
-            Console.WriteLine("  read_file, write_file, list_directory, grep, glob, load_skill");
+        private void RunInteractiveLoop(AIAgent agent)
+        {
             Console.WriteLine("\nEnter your message (type 'exit' to quit):");
             Console.Write("You: ");
             string userInput = Console.ReadLine();

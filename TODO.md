@@ -21,7 +21,7 @@
 - [x] 3.1 创建统一的 MessageContent 内容块类型 (Common/MessageContent.cs)
 - [x] 3.2 扩展 OpenAI ChatMessage 支持多内容 (ImageContentPart, ImageDetail)
 - [x] 3.3 扩展 Anthropic 内容块支持图像 (Source, MediaType)
-- [ ] 3.4 更新各自 Client 的序列化逻辑 (待完成)
+- [x] 3.4 更新各自 Client 的序列化逻辑 (已完成 — 修复文本块误用 Image.Url)
 
 ## 阶段四：SkillManager 重构 [x]
 - [x] 4.1 提取公共方法，消除 CreateLoadSkillFunction/CreateReadSkillTool 重复代码
@@ -30,19 +30,42 @@
 - [x] 4.4 修复大小写敏感匹配 (使用 StringComparison.OrdinalIgnoreCase)
 
 ## 阶段五：代码质量提升 [x]
-- [ ] 5.1 添加缺失的 XML 文档注释 (公共 API) - 待完善
-- [x] 5.2 McpClient 超时机制 - 添加构造函数超时参数
+- [x] 5.1 添加缺失的 XML 文档注释 (公共 API)
+- [x] 5.2 McpClient 超时机制 - 线程安全修复
 - [x] 5.3 工具函数查找优化 (O(n) -> O(1) 使用 Dictionary) - AIAgent.cs
 - [x] 5.4 Substring 边界检查修复 (HttpClientBase.PostStream) - 已在阶段二完成
 
 ## 阶段六：统一抽象层设计 [x]
 - [x] 6.1 创建 IAIClient 接口 (Common/IAIClient.cs)
 - [x] 6.2 创建 AIClientBase 抽象基类 (Common/AIClientBase.cs)
-- [ ] 6.3 重构 OpenAIClient 继承 AIClientBase (可选)
-- [ ] 6.4 重构 AnthropicClient 继承 AIClientBase (可选)
+- [x] 6.3 重构 OpenAIClient 继承 AIClientBase
+- [x] 6.4 重构 AnthropicClient 继承 AIClientBase
+
+## 阶段七：架构优化 (2026-05)
+- [x] 7.1 修复 ImageContentPart 文本/图片语义混淆 (OpenAIClient)
+- [x] 7.2 修复 AIFunctionFactory.InvokeMethod 复杂类型参数转换
+- [x] 7.3 迁移 ToolDefinition/FunctionDefinition 到 Common 命名空间，消除跨命名空间耦合
+- [x] 7.4 修复 JsonSchemaGenerator 属性名 PascalCase → snake_case
+- [x] 7.5 统一使用 JsonHelper 替代裸 JsonConvert
+- [x] 7.6 消除 SkillManager/SkillFunctionHandler FindSkill 代码重复
+- [x] 7.7 OpenAIClient 流式对话新增 ResponseFormat 支持
+- [x] 7.8 AIAgent.MaxIterations 可配置化
+
+## 阶段八：SkillManager 实例化重构 (2026-05-22)
+- [x] 8.1 SkillManager static → 实例类（持有目录路径、技能列表、最后扫描时间）
+- [x] 8.2 SkillFunctionHandler 删除，LoadSkill/ReadSkill 合入 SkillManager 实例方法
+- [x] 8.3 AIAgent 移除 _skills/_skillsDirectories，改用 _skillManager 字段
+- [x] 8.4 新增 EnsureFresh() 文件变更自检 + Refresh()/AddDirectory() API
+- [x] 8.5 AIAgent 新增 SetModel() 方法和 SkillManager 只读属性
+- [x] 8.6 更新 Samples / Tests 适配实例 API
+- [x] 8.7 清理死代码（AIClientBase.ExecuteTool/FindTool, McpJsonRpcResponse.HasError, SkillInfo.DirectoryPath/Files 枚举）
+- [x] 8.8 补全 Anthropic 流式 text 重复发送、image source 结构、流式 structured output 支持
+- [x] 8.9 AIAgent 流式路径工具审批补全 + 空历史索引保护
+- [x] 8.10 AgentTools Glob 重写 + RunCommand 黑名单扩展
+- [x] 8.11 文档全量同步（ProjectRules/Interactive/AGENTS/README/tasks/TODO）
 
 ---
-所有核心任务已完成！
+所有任务已完成！
 
 ---
-最后更新: 2026-05-20
+最后更新: 2026-05-22

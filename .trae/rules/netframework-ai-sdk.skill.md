@@ -1,6 +1,6 @@
 ---
 name: "netframework-ai-sdk"
-description: ".NET Framework 4.0 + C# 5.0 大模型 API SDK 开发指南。包含 JSON snake_case 序列化、TLS 1.2 配置、Flurl URL 构建、OpenAI/Anthropic Agent 工具调用、AgentTools 文件/搜索工具、MAF 渐进式 SkillManager、MCP 客户端等模式。当在 .NET 4.0 项目中对接大模型 API 或构建 AI Agent 时使用。"
+description: ".NET Framework 4.0 + C# 5.0 大模型 API SDK 开发指南。包含 JSON snake_case 序列化、TLS 1.2 配置、HttpWebRequest HTTP 客户端、OpenAI/Anthropic Agent 工具调用、AgentTools 文件/搜索工具、MAF 渐进式 SkillManager（实例模式）、MCP 客户端等模式。当在 .NET 4.0 项目中对接大模型 API 或构建 AI Agent 时使用。"
 ---
 
 # .NET Framework 4.0 大模型 API SDK - 关键模式
@@ -42,16 +42,14 @@ static HttpClientBase()
 
 ---
 
-## 3. HTTP 请求：Flurl URL 构建 + HttpWebRequest
+## 3. HTTP 请求：HttpWebRequest
 
-Flurl.Http 不支持 .NET 4.0（仅 net45+）。正确做法：使用 Flurl.dll 的 `Url` 类构建 URL，用 `HttpWebRequest` 发送请求。
+.NET 4.0 使用原生 `HttpWebRequest` 进行 HTTP 通信，兼容性最佳。
 
 ```csharp
-using Flurl;
-protected readonly Url BaseUrl;
-// 全程使用 Flurl Url 对象链式构建，最后一步 ToString()
-var url = new Url(BaseUrl.ToString()).AppendPathSegment(endpoint).SetQueryParams(queryParams);
-HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url.ToString());
+HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+request.Method = "POST";
+request.ContentType = "application/json";
 ```
 
 ---
@@ -109,20 +107,25 @@ var agent = new AIAgent(client, model, instructions, tools);
 
 ## 6. SkillManager - MAF 渐进式披露模式（重要）
 
-Skill 的正文 **绝不能全部加载到 system prompt 中**。正确做法是 MAF 渐进式披露：
+Skill 的正文 **绝不能全部加载到 system prompt 中**。正确做法是 MAF 渐进式披露。
+SkillManager 为实例类，构造时自动扫描目录，运行时通过 EnsureFresh() 自动感知文件变更。
 
 **流程**：
-1. `DiscoverSkills(path)` → 找到 SKILL.md 文件
-2. `BuildProgressivePrompt(skills)` → 只生成 XML 目录（name + description）
-3. `CreateLoadSkillFunction(skills)` → 创建 `load_skill` 函数工具
+1. `new SkillManager(paths)` → 构造时自动扫描，找到 SKILL.md 文件
+2. `skillManager.BuildProgressivePrompt()` → 只生成 XML 目录（name + description）
+3. `skillManager.CreateLoadSkillFunction()` → 创建 `load_skill` 函数工具
 4. LLM 按需调用 `load_skill("skill-name")` → 获取完整正文
 
 ```csharp
-// ✅ 正确：渐进式披露
-var skills = SkillManager.DiscoverSkills("./skills");
-var prompt = SkillManager.BuildProgressivePrompt(skills);
-var loadSkill = SkillManager.CreateLoadSkillFunction(skills);
+// ✅ 正确：渐进式披露（实例模式）
+var sm = new SkillManager("./skills");
+var prompt = sm.BuildProgressivePrompt();
+var loadSkill = sm.CreateLoadSkillFunction();
 var agent = new AIAgent(client, model, prompt, new[] { loadSkill });
+
+// 或直接使用 AIAgent 内置集成
+var agent = AIAgent.CreateWithDefaults(client, "gpt-4o", "helpful",
+    new string[] { "./skills" }, new[] { myTool });
 ```
 
 **XML 目录格式**：

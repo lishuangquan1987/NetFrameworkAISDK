@@ -1,7 +1,7 @@
-namespace NetFrameworkAISDK.OpenAI
+namespace NetFrameworkAISDK.Common
 {
     /// <summary>
-    /// OpenAI 函数定义，包含函数名称、描述和参数 Schema
+    /// 函数定义，包含函数名称、描述和参数 Schema
     /// </summary>
     public class FunctionDefinition
     {

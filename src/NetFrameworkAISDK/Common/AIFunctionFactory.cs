@@ -150,9 +150,18 @@ namespace NetFrameworkAISDK.Common
                 {
                     var param = parameters[i];
                     object value;
-                    if (argsDict.TryGetValue(param.Name, out value))
+                    if (argsDict.TryGetValue(param.Name, out value) && value != null)
                     {
-                        args[i] = Convert.ChangeType(value, param.ParameterType);
+                        var targetType = param.ParameterType;
+                        if (targetType == typeof(string) || targetType.IsPrimitive || targetType == typeof(decimal))
+                        {
+                            args[i] = Convert.ChangeType(value, targetType);
+                        }
+                        else
+                        {
+                            var json = JsonHelper.Serialize(value);
+                            args[i] = JsonHelper.Deserialize(json, targetType);
+                        }
                     }
                     else if (param.IsOptional)
                     {

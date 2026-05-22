@@ -182,60 +182,42 @@ namespace NetFrameworkAISDK.Common
                 int maxMatches = 200;
                 var result = new StringBuilder();
 
-                if (pattern.Contains("**"))
+                pattern = pattern.Replace('/', '\\');
+                string searchRoot = searchPath;
+                string filePattern = pattern;
+                bool recurse = false;
+
+                int starStarIndex = pattern.IndexOf("**");
+                if (starStarIndex >= 0)
                 {
-                    var parts = pattern.Split(new[] { "**" }, StringSplitOptions.None);
-                    if (parts.Length == 2)
+                    recurse = true;
+                    if (starStarIndex > 0)
                     {
-                        var filePattern = parts[1].TrimStart('\\', '/');
-                        foreach (var dir in System.IO.Directory.GetDirectories(searchPath, "*", SearchOption.AllDirectories))
-                        {
-                            if (matchCount >= maxMatches) { break; }
-                            try
-                            {
-                                var fileMatches = System.IO.Directory.GetFiles(dir, filePattern);
-                                foreach (var f in fileMatches)
-                                {
-                                    if (matchCount >= maxMatches) { break; }
-                                    result.AppendLine(f);
-                                    matchCount++;
-                                }
-                            }
-                            catch (Exception) { }
-                        }
-                        var rootFiles = System.IO.Directory.GetFiles(searchPath, filePattern);
-                        foreach (var f in rootFiles)
-                        {
-                            if (matchCount >= maxMatches) { break; }
-                            result.AppendLine(f);
-                            matchCount++;
-                        }
+                        string prefix = pattern.Substring(0, starStarIndex).TrimEnd('\\');
+                        searchRoot = System.IO.Path.Combine(searchPath, prefix);
+                    }
+                    if (starStarIndex + 2 < pattern.Length)
+                    {
+                        filePattern = pattern.Substring(starStarIndex + 2).TrimStart('\\');
+                    }
+                    else
+                    {
+                        filePattern = "*";
                     }
                 }
-                else
+
+                if (!Directory.Exists(searchRoot))
                 {
-                    foreach (var dir in System.IO.Directory.GetDirectories(searchPath, "*", SearchOption.AllDirectories))
-                    {
-                        if (matchCount >= maxMatches) { break; }
-                        try
-                        {
-                            var fileMatches = System.IO.Directory.GetFiles(dir, pattern);
-                            foreach (var f in fileMatches)
-                            {
-                                if (matchCount >= maxMatches) { break; }
-                                result.AppendLine(f);
-                                matchCount++;
-                            }
-                        }
-                        catch (Exception) { }
-                    }
-                    var rootFiles2 = System.IO.Directory.GetFiles(searchPath, pattern);
-                    foreach (var f in rootFiles2)
-                    {
-                        if (matchCount >= maxMatches) { break; }
-                        result.AppendLine(f);
-                        matchCount++;
-                    }
+                    return "Error: Directory not found: " + searchRoot;
+                }
+
+                SearchOption searchOption = recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+                var matches = System.IO.Directory.GetFiles(searchRoot, filePattern, searchOption);
+                foreach (var f in matches)
+                {
+                    if (matchCount >= maxMatches) { break; }
+                    result.AppendLine(f);
+                    matchCount++;
                 }
 
                 if (matchCount == 0)
@@ -439,7 +421,9 @@ namespace NetFrameworkAISDK.Common
             if (command.Contains("&") || command.Contains("|") || command.Contains(";") ||
                 command.Contains(">") || command.Contains("<") || command.Contains("^") ||
                 command.Contains("\r") || command.Contains("\n") || command.Contains("`") ||
-                command.Contains("$") || command.Contains("%"))
+                command.Contains("$") || command.Contains("%") || command.Contains("!") ||
+                command.Contains("(") || command.Contains(")") || command.Contains("@") ||
+                command.Contains("\t"))
             {
                 return "Error: Command contains unsafe characters.";
             }

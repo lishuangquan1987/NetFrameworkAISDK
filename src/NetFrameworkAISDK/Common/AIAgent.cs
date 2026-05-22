@@ -21,10 +21,16 @@ namespace NetFrameworkAISDK.Common
         private readonly List<AIFunction> _functions;
         private readonly Dictionary<string, AIFunction> _functionMap;
         private readonly List<ConversationMessage> _conversationHistory;
-        private readonly List<SkillInfo> _skills;
-        private readonly string[] _skillsDirectories;
+        private SkillManager _skillManager;
+        private string _baseInstructions;
 
         private const int DefaultMaxIterations = 10;
+
+        /// <summary>
+        /// 工具调用循环的最大迭代次数。超过此次数后以最后一次内容作为最终回复。
+        /// 默认值为 10，可在构造后修改。
+        /// </summary>
+        public int MaxIterations { get; set; }
 
         /// <summary>
         /// 工具审批回调。设置为 true 表示批准执行，false 表示拒绝执行。
@@ -40,12 +46,13 @@ namespace NetFrameworkAISDK.Common
         /// <param name="instructions">系统指令/提示词</param>
         /// <param name="tools">可用的工具函数列表</param>
         public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools)
-            : this(client, model, instructions, tools, false, null)
+            : this(client, model, instructions, tools, false, (string[])null)
         {
         }
 
         /// <summary>
-        /// 创建 AIAgent 实例（完整构造），支持自动集成默认工具和 Skills
+        /// 创建 AIAgent 实例（完整构造），支持自动集成默认工具和 Skills。
+        /// SkillManager 自动持有目录路径，支持运行时文件变更感知和重新扫描。
         /// </summary>
         /// <param name="client">AI 客户端（OpenAI 或 Anthropic）</param>
         /// <param name="model">模型名称</param>
@@ -56,29 +63,13 @@ namespace NetFrameworkAISDK.Common
         public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools, bool includeDefaultTools, string[] skillsDirectories)
         {
             _client = client;
-            _skills = new List<SkillInfo>();
-            _skillsDirectories = skillsDirectories;
-
-            string fullInstructions = instructions;
-
-            if (skillsDirectories != null && skillsDirectories.Length > 0)
-            {
-                var discoveredSkills = SkillManager.DiscoverSkills(skillsDirectories);
-                if (discoveredSkills != null && discoveredSkills.Count > 0)
-                {
-                    _skills = discoveredSkills;
-                    var skillPrompt = SkillManager.BuildProgressivePrompt(_skills);
-                    if (!string.IsNullOrEmpty(skillPrompt))
-                    {
-                        fullInstructions = fullInstructions + "\n\n" + skillPrompt;
-                    }
-                }
-            }
+            _baseInstructions = instructions;
+            _skillManager = new SkillManager(skillsDirectories ?? new string[0]);
 
             _options = new ConversationOptions
             {
                 Model = model,
-                SystemPrompt = fullInstructions
+                SystemPrompt = BuildSystemPrompt()
             };
 
             _functions = new List<AIFunction>();
@@ -95,11 +86,8 @@ namespace NetFrameworkAISDK.Common
                 _functions.AddRange(tools);
             }
 
-            if (_skills.Count > 0)
-            {
-                _functions.Add(SkillManager.CreateLoadSkillFunction(_skills));
-                _functions.Add(SkillManager.CreateReadSkillTool(_skills));
-            }
+            _functions.Add(_skillManager.CreateLoadSkillFunction());
+            _functions.Add(_skillManager.CreateReadSkillTool());
 
             _functionMap = new Dictionary<string, AIFunction>();
             foreach (var f in _functions)
@@ -111,6 +99,8 @@ namespace NetFrameworkAISDK.Common
             }
 
             _conversationHistory = new List<ConversationMessage>();
+
+            MaxIterations = DefaultMaxIterations;
 
             _client.ConfigureTools(_functions);
         }
@@ -149,6 +139,27 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
+        /// 设置模型名称
+        /// </summary>
+        /// <param name="model">模型名称（如 "gpt-4o"、"claude-sonnet-4-20250514"）</param>
+        public void SetModel(string model)
+        {
+            if (!string.IsNullOrEmpty(model))
+            {
+                _options.Model = model;
+            }
+        }
+
+        /// <summary>
+        /// 获取当前 SkillManager 实例，可用于运行时操作（AddDirectory、RemoveDirectory、Refresh 等）。
+        /// 通过此属性直接操作 SkillManager，无需经过 AIAgent 包装方法。
+        /// </summary>
+        public SkillManager SkillManager
+        {
+            get { return _skillManager; }
+        }
+
+        /// <summary>
         /// 执行一次非流式对话，自动处理工具调用循环
         /// </summary>
         /// <param name="userMessage">用户输入消息</param>
@@ -161,7 +172,7 @@ namespace NetFrameworkAISDK.Common
         public ApiResponse<string> Run(string userMessage, Action<ToolCallEventArgs> onToolCall = null)
         {
             AddUserMessage(userMessage, null);
-            return AgentLoop(onToolCall, DefaultMaxIterations);
+            return AgentLoop(onToolCall, MaxIterations);
         }
 
         /// <summary>
@@ -174,7 +185,7 @@ namespace NetFrameworkAISDK.Common
         public ApiResponse<string> Run(string userMessage, List<MessageContent> contentParts, Action<ToolCallEventArgs> onToolCall = null)
         {
             AddUserMessage(userMessage, contentParts);
-            return AgentLoop(onToolCall, DefaultMaxIterations);
+            return AgentLoop(onToolCall, MaxIterations);
         }
 
         /// <summary>
@@ -221,19 +232,41 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
+        /// 构建当前的 SystemPrompt，包含原始指令 + SkillManager 渐进式披露目录。
+        /// 每次调用前自动检查 SkillManager 文件更新，确保新技能能被 LLM 发现。
+        /// </summary>
+        private string BuildSystemPrompt()
+        {
+            var skillPrompt = _skillManager.BuildProgressivePrompt();
+            if (!string.IsNullOrEmpty(skillPrompt))
+            {
+                return _baseInstructions + "\n\n" + skillPrompt;
+            }
+            return _baseInstructions;
+        }
+
+        /// <summary>
         /// 工具调用内部循环。持续调用模型直到无工具调用或达到最大迭代次数
         /// </summary>
         private ApiResponse<string> AgentLoop(Action<ToolCallEventArgs> onToolCall, int remainingIterations)
         {
             if (remainingIterations <= 0)
             {
-                var lastMsg = _conversationHistory[_conversationHistory.Count - 1];
+                if (_conversationHistory.Count > 0)
+                {
+                    var lastMsg = _conversationHistory[_conversationHistory.Count - 1];
+                    return new ApiResponse<string>
+                    {
+                        Result = lastMsg.Content != null ? lastMsg.Content : ""
+                    };
+                }
                 return new ApiResponse<string>
                 {
-                    Result = lastMsg.Content != null ? lastMsg.Content : ""
+                    Error = new ApiError("Agent loop exceeded max iterations with empty history.")
                 };
             }
 
+            _options.SystemPrompt = BuildSystemPrompt();
             var response = _client.SendConversation(_conversationHistory, _options);
 
             if (!response.IsSuccess)
@@ -284,7 +317,7 @@ namespace NetFrameworkAISDK.Common
             Action<ToolCallEventArgs> onToolCall = null)
         {
             AddUserMessage(userMessage, null);
-            StreamingLoop(onUpdate, onError, onToolCall, DefaultMaxIterations);
+            StreamingLoop(onUpdate, onError, onToolCall, MaxIterations);
         }
 
         /// <summary>
@@ -303,7 +336,7 @@ namespace NetFrameworkAISDK.Common
             Action<ToolCallEventArgs> onToolCall = null)
         {
             AddUserMessage(userMessage, contentParts);
-            StreamingLoop(onUpdate, onError, onToolCall, DefaultMaxIterations);
+            StreamingLoop(onUpdate, onError, onToolCall, MaxIterations);
         }
 
         /// <summary>
@@ -325,6 +358,7 @@ namespace NetFrameworkAISDK.Common
             var collectedToolCalls = new List<ToolCallRequest>();
             bool hasError = false;
 
+            _options.SystemPrompt = BuildSystemPrompt();
             _client.SendConversationStreaming(
                 _conversationHistory,
                 _options,
@@ -382,13 +416,49 @@ namespace NetFrameworkAISDK.Common
                 string functionArgs = toolCall.FunctionArguments != null ? toolCall.FunctionArguments : "{}";
 
                 AIFunction function = null;
-                if (_functionMap.ContainsKey(functionName))
+                if (!string.IsNullOrEmpty(functionName) && _functionMap.ContainsKey(functionName))
                 {
                     function = _functionMap[functionName];
                 }
 
                 if (function != null)
                 {
+                    bool needsApproval = function.RequiresApproval;
+                    if (function.ApprovalPredicate != null)
+                    {
+                        needsApproval = function.ApprovalPredicate(functionName, functionArgs);
+                    }
+
+                    if (needsApproval && ToolApproval != null)
+                    {
+                        var approvalArgs = new ToolCallEventArgs
+                        {
+                            FunctionName = functionName,
+                            FunctionArguments = functionArgs,
+                            ToolCallId = toolCall.Id,
+                            RequiresApproval = true
+                        };
+
+                        if (!ToolApproval(approvalArgs))
+                        {
+                            _conversationHistory.Add(new ConversationMessage
+                            {
+                                Role = MessageRole.Tool,
+                                Name = functionName,
+                                ToolCallId = toolCall.Id,
+                                Content = "[REJECTED] User denied execution of tool: " + functionName
+                            });
+
+                            if (onToolCall != null)
+                            {
+                                approvalArgs.Result = "[REJECTED]";
+                                approvalArgs.IsApproved = false;
+                                onToolCall(approvalArgs);
+                            }
+                            continue;
+                        }
+                    }
+
                     var result = function.Execute(functionArgs);
                     _conversationHistory.Add(new ConversationMessage
                     {

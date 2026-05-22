@@ -1,4 +1,4 @@
-# NetFrameworkAI SDK
+# NetFrameworkAISDK SDK
 
 **OpenAI & Anthropic SDK for .NET Framework 4.0+** — AI Agent, tool calling, structured output, MCP client, skill management.
 

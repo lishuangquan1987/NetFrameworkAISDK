@@ -1,13 +1,13 @@
 # 项目执行任务计划
 
 ## 阶段一：项目初始化
-1. 创建 .NET Framework 4.0 类库项目 NetFrameworkAI
+1. 创建 .NET Framework 4.0 类库项目 NetFrameworkAISDK
 2. 创建项目文件夹结构（OpenAI、Anthropic、Common）
-3. 配置 NuGet 依赖：Flurl（兼容 .NET 4.0 的版本）、Newtonsoft.Json
+3. 配置 NuGet 依赖：Newtonsoft.Json
 4. 创建解决方案文件
 
 ## 阶段二：核心基础设施
-5. 创建通用 HTTP 客户端基类（使用 Flurl）
+5. 创建通用 HTTP 客户端基类（使用 HttpWebRequest）
 6. 创建 JSON 序列化/反序列化辅助类（使用 Newtonsoft.Json）
 7. 创建错误对象基类和通用错误类型
 8. 创建项目级 AssemblyInfo.cs
@@ -39,9 +39,9 @@
 ## 验证清单
 每个任务完成后验证：
 - ✅ 代码兼容 .NET Framework 4.0
-- ✅ HTTP 请求使用 Flurl
+- ✅ HTTP 请求使用 HttpWebRequest
 - ✅ JSON 处理使用强类型类
 - ✅ API 密钥通过构造函数传入
 - ✅ 流式回复使用 Action<T> 回调
 - ✅ 错误处理返回错误对象
-- ✅ 命名空间使用 NetFrameworkAI.* 格式
+- ✅ 命名空间使用 NetFrameworkAISDK.* 格式
