@@ -7,6 +7,11 @@ using System.Text;
 
 namespace NetFrameworkAISDK.Common
 {
+    /// <summary>
+    /// 内置 Agent 工具集，提供文件读写、目录操作、搜索、命令执行等常用功能。
+    /// 所有工具通过 <see cref="CreateDefaultTools"/> 方法一次性注册，
+    /// 自动发现所有标记 <see cref="System.ComponentModel.DescriptionAttribute"/> 的私有静态方法。
+    /// </summary>
     public static class AgentTools
     {
         [Description("Read the contents of a file at the given path")]
