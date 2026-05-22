@@ -47,6 +47,7 @@
     <Compile Include="Common\ApiErrorTests.cs" />
     <Compile Include="Common\AIFunctionTests.cs" />
     <Compile Include="Common\AgentToolsTests.cs" />
+    <Compile Include="Common\AIAgentTests.cs" />
     <Compile Include="Common\SkillManagerTests.cs" />
     <Compile Include="Common\MessageContentTests.cs" />
     <Compile Include="Common\JsonSchemaGeneratorTests.cs" />
