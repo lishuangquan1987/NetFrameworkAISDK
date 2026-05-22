@@ -24,6 +24,10 @@ namespace NetFrameworkAISDK.Common
         private SkillManager _skillManager;
         private string _baseInstructions;
 
+        // SystemPrompt 缓存，避免 AgentLoop 每次迭代重复 I/O
+        private string _cachedSystemPrompt;
+        private DateTime _lastPromptBuildTime;
+
         private const int DefaultMaxIterations = 10;
 
         /// <summary>
@@ -237,12 +241,25 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         private string BuildSystemPrompt()
         {
+            // 缓存有效期 2 秒，避免工具调用循环中每次迭代重复文件 I/O
+            // SkillManager.EnsureFresh 已在 BuildProgressivePrompt 内部触发
+            if (_cachedSystemPrompt != null &&
+                (DateTime.UtcNow - _lastPromptBuildTime).TotalSeconds < 2)
+            {
+                return _cachedSystemPrompt;
+            }
+
             var skillPrompt = _skillManager.BuildProgressivePrompt();
             if (!string.IsNullOrEmpty(skillPrompt))
             {
-                return _baseInstructions + "\n\n" + skillPrompt;
+                _cachedSystemPrompt = _baseInstructions + "\n\n" + skillPrompt;
             }
-            return _baseInstructions;
+            else
+            {
+                _cachedSystemPrompt = _baseInstructions;
+            }
+            _lastPromptBuildTime = DateTime.UtcNow;
+            return _cachedSystemPrompt;
         }
 
         /// <summary>
