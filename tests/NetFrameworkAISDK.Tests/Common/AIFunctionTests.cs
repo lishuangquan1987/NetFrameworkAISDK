@@ -1,6 +1,8 @@
 using NetFrameworkAISDK.Common;
 using NUnit.Framework;
 using System;
+using System.Collections.Generic;
+using System.Threading;
 
 namespace NetFrameworkAISDK.Tests.Common
 {
@@ -89,6 +91,58 @@ namespace NetFrameworkAISDK.Tests.Common
         private string GetWeatherMethod([System.ComponentModel.Description("The location")] string location)
         {
             return "Weather in " + location;
+        }
+
+        [Test]
+        public void ConfigureTools_RaceCondition_DoesNotThrow()
+        {
+            var client = new TestableAIClient("key", "http://localhost");
+            var tools = new List<AIFunction>
+            {
+                AIFunction.Create(new Func<string>(delegate() { return "a"; }), "Tool A", "a"),
+                AIFunction.Create(new Func<string>(delegate() { return "b"; }), "Tool B", "b")
+            };
+
+            var exceptions = new List<Exception>();
+            var thread1 = new Thread(delegate()
+            {
+                try
+                {
+                    for (int i = 0; i < 100; i++)
+                    {
+                        client.ConfigureTools(tools);
+                    }
+                }
+                catch (Exception ex) { lock (exceptions) { exceptions.Add(ex); } }
+            });
+            var thread2 = new Thread(delegate()
+            {
+                try
+                {
+                    for (int i = 0; i < 100; i++)
+                    {
+                        client.ConfigureTools(tools);
+                    }
+                }
+                catch (Exception ex) { lock (exceptions) { exceptions.Add(ex); } }
+            });
+
+            thread1.Start(); thread2.Start();
+            thread1.Join(); thread2.Join();
+
+            Assert.AreEqual(0, exceptions.Count,
+                "No exceptions should be thrown");
+        }
+
+        // 测试辅助类：暴露 ConfigureTools 以测试线程安全
+        private class TestableAIClient : AIClientBase
+        {
+            public TestableAIClient(string key, string url) : base(key, url) { }
+            public override ApiResponse<ConversationResponse> SendConversation(
+                List<ConversationMessage> m, ConversationOptions o) { return null; }
+            public override void SendConversationStreaming(
+                List<ConversationMessage> m, ConversationOptions o,
+                Action<ConversationResponse> c, Action<ApiError> e) { }
         }
     }
 }

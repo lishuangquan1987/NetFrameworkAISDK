@@ -15,6 +15,9 @@ namespace NetFrameworkAISDK.Common
         /// <summary>工具名称到实例的快速查找映射</summary>
         protected Dictionary<string, AIFunction> _toolMap;
 
+        /// <summary>工具集合锁，保护 _tools/_toolMap 的并发读写</summary>
+        private readonly object _toolLock = new object();
+
         /// <summary>
         /// 创建 AI 客户端基类实例
         /// </summary>
@@ -55,17 +58,22 @@ namespace NetFrameworkAISDK.Common
         /// <inheritdoc />
         public virtual void ConfigureTools(IEnumerable<AIFunction> tools)
         {
-            _tools = tools != null ? new List<AIFunction>(tools) : new List<AIFunction>();
-            _toolMap = new Dictionary<string, AIFunction>();
+            var newTools = tools != null ? new List<AIFunction>(tools) : new List<AIFunction>();
+            var newMap = new Dictionary<string, AIFunction>();
             if (tools != null)
             {
                 foreach (var t in tools)
                 {
                     if (t != null && !string.IsNullOrEmpty(t.Name))
                     {
-                        _toolMap[t.Name] = t;
+                        newMap[t.Name] = t;
                     }
                 }
+            }
+            lock (_toolLock)
+            {
+                _tools = newTools;
+                _toolMap = newMap;
             }
         }
 
@@ -76,11 +84,14 @@ namespace NetFrameworkAISDK.Common
         /// <returns>工具定义列表，无工具时返回 null</returns>
         protected List<ToolDefinition> BuildToolDefinitions(ConversationOptions options)
         {
-            var allTools = new List<AIFunction>();
-            if (_tools != null)
+            List<AIFunction> toolsSnapshot;
+            lock (_toolLock)
             {
-                allTools.AddRange(_tools);
+                toolsSnapshot = _tools != null ? new List<AIFunction>(_tools) : new List<AIFunction>();
             }
+
+            var allTools = new List<AIFunction>();
+            allTools.AddRange(toolsSnapshot);
             if (options.Tools != null)
             {
                 allTools.AddRange(options.Tools);
