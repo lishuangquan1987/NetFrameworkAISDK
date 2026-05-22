@@ -433,18 +433,12 @@ namespace NetFrameworkAISDK.Anthropic
 
             if (anthropicResponse.Content != null)
             {
+                var textBuilder = new System.Text.StringBuilder();
                 foreach (var block in anthropicResponse.Content)
                 {
                     if (block.Type == "text" && !string.IsNullOrEmpty(block.Text))
                     {
-                        if (result.Content != null)
-                        {
-                            result.Content = result.Content + block.Text;
-                        }
-                        else
-                        {
-                            result.Content = block.Text;
-                        }
+                        textBuilder.Append(block.Text);
                     }
 
                     if (block.Type == "tool_use")
@@ -469,6 +463,11 @@ namespace NetFrameworkAISDK.Anthropic
                             });
                         }
                     }
+                }
+
+                if (textBuilder.Length > 0)
+                {
+                    result.Content = textBuilder.ToString();
                 }
             }
 
