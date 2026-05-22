@@ -145,13 +145,17 @@ namespace NetFrameworkAISDK.Common
                                     matchCount++;
                                 }
                             }
-                            catch (Exception)
+                            catch (Exception regexEx)
                             {
+                                System.Diagnostics.Debug.WriteLine(
+                                    "Grep: Regex error on " + file + ":" + (i + 1) + " - " + regexEx.Message);
                             }
                         }
                     }
-                    catch
+                    catch (Exception fileEx)
                     {
+                        System.Diagnostics.Debug.WriteLine(
+                            "Grep: Failed to read file " + file + ": " + fileEx.Message);
                     }
                 }
 

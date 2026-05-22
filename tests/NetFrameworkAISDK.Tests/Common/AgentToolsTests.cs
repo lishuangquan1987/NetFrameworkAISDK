@@ -1,6 +1,8 @@
 using NetFrameworkAISDK.Common;
 using NUnit.Framework;
+using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace NetFrameworkAISDK.Tests.Common
 {
@@ -125,6 +127,32 @@ namespace NetFrameworkAISDK.Tests.Common
 
             var result = tool.Execute("{\"path\":\"\"}");
             Assert.IsTrue(result.Contains("Error"));
+        }
+
+        [Test]
+        public void Grep_WithAccessibleFiles_FindsMatches()
+        {
+            var tool = FindTool("Grep");
+            Assert.IsNotNull(tool);
+
+            var tempDir = Path.Combine(Path.GetTempPath(), "GrepTest_" + Guid.NewGuid());
+            try
+            {
+                Directory.CreateDirectory(tempDir);
+                File.WriteAllText(Path.Combine(tempDir, "test.txt"), "hello world\nfoo bar");
+                File.WriteAllText(Path.Combine(tempDir, "test2.txt"), "hello again");
+
+                var result = tool.Execute(
+                    "{\"pattern\":\"hello\",\"path\":\"" + tempDir.Replace("\\", "\\\\") + "\"}");
+
+                Assert.IsTrue(result.Contains("test.txt"));
+                Assert.IsTrue(result.Contains("test2.txt"));
+                Assert.IsFalse(result.Contains("Error searching"));
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
         }
     }
 }
