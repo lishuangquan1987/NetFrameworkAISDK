@@ -288,25 +288,40 @@ namespace NetFrameworkAISDK.Common
 
             foreach (var dir in Directory.GetDirectories(directoryPath))
             {
-                var skillMdPath = Path.Combine(dir, "SKILL.md");
-                if (File.Exists(skillMdPath))
-                {
-                    try
-                    {
-                        var skill = ParseSkillFile(skillMdPath);
-                        if (skill != null)
-                        {
-                            skills.Add(skill);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("Warning: Failed to parse skill at " + skillMdPath + ": " + ex.Message);
-                    }
-                }
+                ScanDirectoryForSkill(dir, skills);
             }
 
             return skills;
+        }
+
+        /// <summary>
+        /// 递归扫描目录以查找 SKILL.md。发现 SKILL.md 后停止递归，
+        /// 允许嵌套目录结构（如 category/my-skill/）
+        /// </summary>
+        private static void ScanDirectoryForSkill(string directoryPath, List<SkillInfo> skills)
+        {
+            var skillMdPath = Path.Combine(directoryPath, "SKILL.md");
+            if (File.Exists(skillMdPath))
+            {
+                try
+                {
+                    var skill = ParseSkillFile(skillMdPath);
+                    if (skill != null)
+                    {
+                        skills.Add(skill);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Warning: Failed to parse skill at " + skillMdPath + ": " + ex.Message);
+                }
+                return;
+            }
+
+            foreach (var subDir in Directory.GetDirectories(directoryPath))
+            {
+                ScanDirectoryForSkill(subDir, skills);
+            }
         }
 
         /// <summary>

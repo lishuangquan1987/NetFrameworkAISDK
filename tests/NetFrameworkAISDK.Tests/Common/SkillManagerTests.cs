@@ -130,6 +130,28 @@ namespace NetFrameworkAISDK.Tests.Common
         }
 
         [Test]
+        public void DiscoverFromDirectory_FindsNestedSkills()
+        {
+            var tempRoot = Path.Combine(Path.GetTempPath(), "SkillNestedTest_" + Guid.NewGuid());
+            try
+            {
+                var nestedDir = Path.Combine(tempRoot, "category", "my-skill");
+                Directory.CreateDirectory(nestedDir);
+                File.WriteAllText(Path.Combine(nestedDir, "SKILL.md"),
+                    "---\nname: nested-skill\ndescription: A nested skill\n---\n# Nested");
+
+                var sm = new SkillManager(tempRoot);
+
+                Assert.AreEqual(1, sm.Skills.Count);
+                Assert.AreEqual("nested-skill", sm.Skills[0].Name);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true);
+            }
+        }
+
+        [Test]
         public void Discover_PriorityOrder_HigherPriorityAppearsFirst()
         {
             var tempRoot = Path.Combine(Path.GetTempPath(), "SkillManagerTest_Priority_" + Guid.NewGuid());
