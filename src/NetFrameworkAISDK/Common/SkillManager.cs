@@ -252,7 +252,7 @@ namespace NetFrameworkAISDK.Common
 
             if (paths != null)
             {
-                for (int i = paths.Count - 1; i >= 0; i--)
+                for (int i = 0; i < paths.Count; i++)
                 {
                     var dirSkills = DiscoverFromDirectory(paths[i]);
                     if (dirSkills != null)
@@ -262,11 +262,12 @@ namespace NetFrameworkAISDK.Common
                             if (!seenNames.Contains(skill.Name))
                             {
                                 seenNames.Add(skill.Name);
-                                result.Insert(0, skill);
+                                result.Add(skill);
                             }
                         }
                     }
                 }
+                result.Reverse();
             }
 
             _skills = result;

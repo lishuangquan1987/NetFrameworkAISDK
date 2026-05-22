@@ -1,6 +1,8 @@
 using NetFrameworkAISDK.Common;
 using NUnit.Framework;
+using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace NetFrameworkAISDK.Tests.Common
 {
@@ -125,6 +127,32 @@ namespace NetFrameworkAISDK.Tests.Common
             sm.Refresh();
 
             Assert.IsNotNull(sm.Skills);
+        }
+
+        [Test]
+        public void Discover_PriorityOrder_HigherPriorityAppearsFirst()
+        {
+            var tempRoot = Path.Combine(Path.GetTempPath(), "SkillManagerTest_Priority_" + Guid.NewGuid());
+            try
+            {
+                var lowDir = Path.Combine(tempRoot, "low");
+                var highDir = Path.Combine(tempRoot, "high");
+                Directory.CreateDirectory(Path.Combine(lowDir, "common-tool"));
+                Directory.CreateDirectory(Path.Combine(highDir, "common-tool"));
+                File.WriteAllText(Path.Combine(lowDir, "common-tool", "SKILL.md"),
+                    "---\nname: common-tool\ndescription: Low priority version\n---\n# Low");
+                File.WriteAllText(Path.Combine(highDir, "common-tool", "SKILL.md"),
+                    "---\nname: common-tool\ndescription: High priority version\n---\n# High");
+
+                var sm = new SkillManager(lowDir, highDir);
+
+                Assert.AreEqual(1, sm.Skills.Count);
+                Assert.AreEqual("High priority version", sm.Skills[0].Description);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true);
+            }
         }
     }
 }
