@@ -59,6 +59,8 @@
     <Compile Include="Common\ConversationResponse.cs" />
     <Compile Include="Common\HttpClientBase.cs" />
     <Compile Include="Common\IAIClient.cs" />
+    <Compile Include="Common\ILogger.cs" />
+    <Compile Include="Common\ConsoleLogger.cs" />
     <Compile Include="Common\JsonHelper.cs" />
     <Compile Include="Common\JsonSchemaGenerator.cs" />
     <Compile Include="Common\McpClient.cs" />

@@ -270,7 +270,10 @@ namespace NetFrameworkAISDK.Tests.Common
             var response = agent.Run("Do it", delegate(ToolCallEventArgs args) { toolCallLog.Add(args); });
 
             Assert.IsTrue(response.IsSuccess);
-            Assert.AreEqual(0, toolCallLog.Count);
+            // 即使被拒绝，onToolCall 回调也应该被调用
+            Assert.AreEqual(1, toolCallLog.Count);
+            Assert.IsFalse(toolCallLog[0].IsApproved);
+            Assert.AreEqual("[REJECTED]", toolCallLog[0].Result);
         }
     }
 }

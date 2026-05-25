@@ -23,6 +23,7 @@ namespace NetFrameworkAISDK.Common
         private readonly List<ConversationMessage> _conversationHistory;
         private SkillManager _skillManager;
         private string _baseInstructions;
+        private readonly ILogger _logger;
 
         // SystemPrompt 缓存，避免 AgentLoop 每次迭代重复 I/O
         private string _cachedSystemPrompt;
@@ -69,6 +70,7 @@ namespace NetFrameworkAISDK.Common
             _client = client;
             _baseInstructions = instructions;
             _skillManager = new SkillManager(skillsDirectories ?? new string[0]);
+            _logger = new ConsoleLogger();
 
             _options = new ConversationOptions
             {
@@ -368,6 +370,7 @@ namespace NetFrameworkAISDK.Common
         {
             if (remainingIterations <= 0)
             {
+                // 与 AgentLoop 保持一致：返回最后内容，不抛错误
                 if (_conversationHistory.Count > 0)
                 {
                     var lastMsg = _conversationHistory[_conversationHistory.Count - 1];
@@ -376,7 +379,7 @@ namespace NetFrameworkAISDK.Common
                         onUpdate(lastMsg.Content);
                     }
                 }
-                onError(new ApiError("Agent loop exceeded maximum iterations."));
+                _logger.Log("Agent loop exceeded maximum iterations, returning last content", "WARN");
                 return;
             }
 

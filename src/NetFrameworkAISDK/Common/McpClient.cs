@@ -23,12 +23,13 @@ namespace NetFrameworkAISDK.Common
         private volatile bool _readCancelled;
         private int _timeoutMilliseconds;
         private readonly object _sendLock;
+        private readonly ILogger _logger;
 
         /// <summary>
         /// 创建 MCP 客户端（默认 30 秒超时）
         /// </summary>
         public McpClient()
-            : this(30000)
+            : this(30000, null)
         {
         }
 
@@ -37,9 +38,20 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         /// <param name="timeoutMilliseconds">请求超时毫秒数</param>
         public McpClient(int timeoutMilliseconds)
+            : this(timeoutMilliseconds, null)
+        {
+        }
+
+        /// <summary>
+        /// 创建 MCP 客户端并指定超时时间和日志记录器
+        /// </summary>
+        /// <param name="timeoutMilliseconds">请求超时毫秒数</param>
+        /// <param name="logger">日志记录器（可选）</param>
+        public McpClient(int timeoutMilliseconds, ILogger logger)
         {
             _timeoutMilliseconds = timeoutMilliseconds;
             _sendLock = new object();
+            _logger = logger ?? new ConsoleLogger();
         }
 
         /// <summary>
@@ -354,6 +366,9 @@ namespace NetFrameworkAISDK.Common
         {
             lock (_sendLock)
             {
+                // 每次请求前重置状态
+                Reset();
+
                 _requestId++;
                 var request = new Dictionary<string, object>
                 {
@@ -365,32 +380,41 @@ namespace NetFrameworkAISDK.Common
 
                 string requestJson = JsonHelper.Serialize(request);
 
+                _logger.Log(string.Format("MCP sending request: method={0}, id={1}", method, _requestId), "DEBUG");
+
                 _stdin.WriteLine(requestJson);
                 _stdin.Flush();
 
                 string responseLine = ReadLineWithTimeout(_timeoutMilliseconds);
                 if (responseLine == null)
                 {
+                    string errorMsg = string.Format("MCP request timed out after {0}ms", _timeoutMilliseconds);
+                    _logger.Log(errorMsg, "WARN");
                     return new ApiResponse<object>
                     {
-                        Error = new ApiError("MCP request timed out after " + _timeoutMilliseconds + "ms")
+                        Error = new ApiError(errorMsg)
                     };
                 }
 
                 var response = JsonHelper.Deserialize<McpJsonRpcResponse>(responseLine);
                 if (response == null)
                 {
-                    return new ApiResponse<object> { Error = new ApiError("Failed to parse MCP response") };
+                    string errorMsg = "Failed to parse MCP response";
+                    _logger.Log(errorMsg, "ERROR");
+                    return new ApiResponse<object> { Error = new ApiError(errorMsg) };
                 }
 
                 if (response.Error != null)
                 {
+                    string errorMsg = response.Error.Message ?? "MCP request error";
+                    _logger.Log(string.Format("MCP error: {0}", errorMsg), "ERROR");
                     return new ApiResponse<object>
                     {
-                        Error = new ApiError(response.Error.Message ?? "MCP request error")
+                        Error = new ApiError(errorMsg)
                     };
                 }
 
+                _logger.Log("MCP request completed successfully", "DEBUG");
                 return new ApiResponse<object> { Result = response.Result };
             }
         }

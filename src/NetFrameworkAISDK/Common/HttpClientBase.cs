@@ -14,6 +14,14 @@ namespace NetFrameworkAISDK.Common
     /// </summary>
     public abstract class HttpClientBase : IDisposable
     {
+        // .NET 4.0 不包含 TLS 1.2 常量，使用数值定义
+        // 192 = TLS 1.0
+        // 768 = TLS 1.1
+        // 3072 = TLS 1.2
+        private const SecurityProtocolType Tls10 = (SecurityProtocolType)192;
+        private const SecurityProtocolType Tls11 = (SecurityProtocolType)768;
+        private const SecurityProtocolType Tls12 = (SecurityProtocolType)3072;
+
         /// <summary>API 密钥</summary>
         protected readonly string ApiKey;
 
@@ -25,16 +33,18 @@ namespace NetFrameworkAISDK.Common
 
         private readonly int MaxRetries;
         private readonly int RetryDelayMilliseconds;
+        private static readonly ILogger _logger = new ConsoleLogger();
 
         static HttpClientBase()
         {
             try
             {
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)(3072 | 768 | 192);
+                ServicePointManager.SecurityProtocol = Tls12 | Tls11 | Tls10;
+                _logger.Log("HttpClientBase: Configured SecurityProtocol to TLS 1.2, 1.1, and 1.0", "DEBUG");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("HttpClientBase: Failed to configure SecurityProtocol: " + ex.Message);
+                _logger.Log("HttpClientBase: Failed to configure SecurityProtocol: " + ex.Message, "ERROR");
             }
         }
 
@@ -202,6 +212,8 @@ namespace NetFrameworkAISDK.Common
                 {
                     url = BuildUrl(endpoint);
                 }
+                
+                _logger.Log(string.Format("HTTP {0} {1} (attempt {2})", method, url, attempt + 1), "DEBUG");
 
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
                 request.Method = method;
@@ -235,9 +247,11 @@ namespace NetFrameworkAISDK.Common
                 if (ShouldRetry(ex, attempt))
                 {
                     int delay = RetryDelayMilliseconds * (int)Math.Pow(2, attempt);
+                    _logger.Log(string.Format("WebException, retrying in {0}ms...", delay), "WARN");
                     Thread.Sleep(delay);
                     return RequestWithRetry<T>(method, endpoint, data, queryParams, attempt + 1);
                 }
+                _logger.Log(string.Format("WebException, not retrying: {0}", ex.Message), "ERROR");
                 return HandleWebException<T>(ex);
             }
             catch (Exception ex)
@@ -245,9 +259,11 @@ namespace NetFrameworkAISDK.Common
                 if (IsTransientException(ex) && attempt < MaxRetries)
                 {
                     int delay = RetryDelayMilliseconds * (int)Math.Pow(2, attempt);
+                    _logger.Log(string.Format("Transient exception, retrying in {0}ms: {1}", delay, ex.Message), "WARN");
                     Thread.Sleep(delay);
                     return RequestWithRetry<T>(method, endpoint, data, queryParams, attempt + 1);
                 }
+                _logger.Log(string.Format("Exception: {0}", ex.Message), "ERROR");
                 return new ApiResponse<T> { Error = new ApiError(ex.Message) };
             }
         }
@@ -294,13 +310,35 @@ namespace NetFrameworkAISDK.Common
                         string line;
                         while ((line = reader.ReadLine()) != null)
                         {
+                            line = line.Trim();
+                            
+                            // 忽略空行和非 data: 开头的行（event:、id: 等）
+                            if (string.IsNullOrEmpty(line))
+                            {
+                                continue;
+                            }
+                            
                             if (line.StartsWith("data:"))
                             {
-                                string dataLine = line.Substring(5).TrimStart();
+                                // 安全提取 data: 后的内容
+                                int colonIndex = line.IndexOf(':');
+                                if (colonIndex < 0)
+                                {
+                                    continue;
+                                }
+                                string dataLine = line.Substring(colonIndex + 1).TrimStart();
+                                
                                 if (dataLine == "[DONE]")
                                 {
                                     break;
                                 }
+                                
+                                // 忽略空数据
+                                if (string.IsNullOrWhiteSpace(dataLine))
+                                {
+                                    continue;
+                                }
+                                
                                 try
                                 {
                                     T result = JsonHelper.Deserialize<T>(dataLine);
@@ -308,7 +346,7 @@ namespace NetFrameworkAISDK.Common
                                 }
                                 catch (Exception parseEx)
                                 {
-                                    Debug.WriteLine("SSE parse error: " + parseEx.Message);
+                                    _logger.Log("SSE parse error: " + parseEx.Message, "WARN");
                                 }
                             }
                         }

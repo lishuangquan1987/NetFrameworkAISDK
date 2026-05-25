@@ -145,7 +145,9 @@ namespace NetFrameworkAISDK.Common
                 {
                     var name = _naming.GetPropertyName(prop.Name, false);
                     properties[name] = propSchema;
-                    if (!IsNullable(prop.PropertyType))
+                    // 仅当类型是非可空值类型时才标记为 required
+                    // 引用类型和 Nullable<T> 都不标记为 required
+                    if (prop.PropertyType.IsValueType && !IsNullable(prop.PropertyType))
                     {
                         required.Add(name);
                     }

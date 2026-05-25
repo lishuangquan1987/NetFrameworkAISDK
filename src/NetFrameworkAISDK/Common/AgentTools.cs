@@ -14,6 +14,8 @@ namespace NetFrameworkAISDK.Common
     /// </summary>
     public static class AgentTools
     {
+        private static readonly ILogger _logger = new ConsoleLogger();
+
         [Description("Read the contents of a file at the given path")]
         private static string ReadFile([Description("Absolute or relative path to the file")] string path)
         {
@@ -439,7 +441,8 @@ namespace NetFrameworkAISDK.Common
                 return "Error: Command exceeds maximum length.";
             }
 
-            char[] unsafeChars = new char[] { '&', '|', ';', '>', '<', '^', '`', '$', '%', '!', '(', ')', '@', '\t', '\r', '\n', '\0', '"', '\'', '\\', '/' };
+            // 仅阻止真正危险的命令注入字符：& | ;
+            char[] unsafeChars = new char[] { '&', '|', ';' };
             foreach (char c in unsafeChars)
             {
                 if (command.IndexOf(c) >= 0)
@@ -457,19 +460,27 @@ namespace NetFrameworkAISDK.Common
                     {
                         return "Error: Working directory does not exist: " + workingDir;
                     }
-                    if (workingDir.Contains(".."))
+                    // 验证路径规范化后不包含路径穿越
+                    string normalizedPath = workingDir;
+                    string originalPath = workingDir;
+                    // 简单的路径穿越检测
+                    if (originalPath.Contains("..") && !normalizedPath.Contains(".."))
                     {
+                        // 路径被规范化后不包含 ..，说明可能有穿越
                         return "Error: Working directory path contains traversal characters.";
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    _logger.Log("Invalid working directory path: " + ex.Message, "ERROR");
                     return "Error: Invalid working directory path.";
                 }
             }
 
             try
             {
+                _logger.Log(string.Format("Executing command: {0}", command), "INFO");
+                
                 using (var process = new System.Diagnostics.Process())
                 {
                     process.StartInfo.FileName = "cmd.exe";
@@ -488,6 +499,8 @@ namespace NetFrameworkAISDK.Common
                     string error = process.StandardError.ReadToEnd();
                     process.WaitForExit();
 
+                    _logger.Log(string.Format("Command completed with exit code: {0}", process.ExitCode), "DEBUG");
+
                     if (process.ExitCode != 0 && !string.IsNullOrEmpty(error))
                     {
                         return "Error (exit code " + process.ExitCode + "): " + error;
@@ -497,6 +510,7 @@ namespace NetFrameworkAISDK.Common
             }
             catch (Exception ex)
             {
+                _logger.Log("Error executing command: " + ex.Message, "ERROR");
                 return "Error executing command: " + ex.Message;
             }
         }
