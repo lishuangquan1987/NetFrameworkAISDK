@@ -48,6 +48,9 @@ namespace NetFrameworkAISDK.Samples
                     case "10":
                         RunSample(new StructuredOutputSample());
                         break;
+                    case "11":
+                        RunSample(new PluginSystemSample());
+                        break;
                     case "0":
                         Console.WriteLine("\nExiting...");
                         return;
@@ -71,6 +74,7 @@ namespace NetFrameworkAISDK.Samples
             Console.WriteLine("8. Agent Skills - Discover and Load SKILL.md");
             Console.WriteLine("9. Multimodal Chat - Image + Text Input with AIAgent");
             Console.WriteLine("10. Structured Output - AI returns typed objects");
+            Console.WriteLine("11. Plugin System - Middleware, Storage, Tools");
             Console.WriteLine("0. Exit");
             Console.WriteLine();
             Console.Write("Enter your choice: ");
