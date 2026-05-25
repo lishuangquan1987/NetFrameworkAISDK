@@ -118,11 +118,13 @@ namespace NetFrameworkAISDK.Common
                 var result = new StringBuilder();
                 int matchCount = 0;
                 int maxMatches = 100;
+                int maxFilesToScan = 1000;
+                int fileCount = 0;
 
-                string[] files;
+                IEnumerable<string> files;
                 if (!string.IsNullOrEmpty(filePattern))
                 {
-                    files = System.IO.Directory.GetFiles(searchPath, filePattern, SearchOption.AllDirectories);
+                    files = System.IO.Directory.EnumerateFiles(searchPath, filePattern, SearchOption.AllDirectories);
                 }
                 else if (File.Exists(searchPath))
                 {
@@ -130,11 +132,16 @@ namespace NetFrameworkAISDK.Common
                 }
                 else
                 {
-                    files = System.IO.Directory.GetFiles(searchPath, "*", SearchOption.AllDirectories);
+                    files = System.IO.Directory.EnumerateFiles(searchPath, "*", SearchOption.AllDirectories);
                 }
 
                 foreach (var file in files)
                 {
+                    if (fileCount++ >= maxFilesToScan)
+                    {
+                        result.AppendLine("Warning: Search stopped after scanning " + maxFilesToScan + " files.");
+                        break;
+                    }
                     if (matchCount >= maxMatches) { break; }
                     try
                     {
@@ -427,14 +434,38 @@ namespace NetFrameworkAISDK.Common
         {
             if (string.IsNullOrEmpty(command)) { return "Error: command is required."; }
 
-            if (command.Contains("&") || command.Contains("|") || command.Contains(";") ||
-                command.Contains(">") || command.Contains("<") || command.Contains("^") ||
-                command.Contains("\r") || command.Contains("\n") || command.Contains("`") ||
-                command.Contains("$") || command.Contains("%") || command.Contains("!") ||
-                command.Contains("(") || command.Contains(")") || command.Contains("@") ||
-                command.Contains("\t"))
+            if (command.Length > 2000)
             {
-                return "Error: Command contains unsafe characters.";
+                return "Error: Command exceeds maximum length.";
+            }
+
+            char[] unsafeChars = new char[] { '&', '|', ';', '>', '<', '^', '`', '$', '%', '!', '(', ')', '@', '\t', '\r', '\n', '\0', '"', '\'', '\\', '/' };
+            foreach (char c in unsafeChars)
+            {
+                if (command.IndexOf(c) >= 0)
+                {
+                    return "Error: Command contains unsafe characters.";
+                }
+            }
+
+            if (!string.IsNullOrEmpty(workingDir))
+            {
+                try
+                {
+                    workingDir = System.IO.Path.GetFullPath(workingDir);
+                    if (!System.IO.Directory.Exists(workingDir))
+                    {
+                        return "Error: Working directory does not exist: " + workingDir;
+                    }
+                    if (workingDir.Contains(".."))
+                    {
+                        return "Error: Working directory path contains traversal characters.";
+                    }
+                }
+                catch (Exception)
+                {
+                    return "Error: Invalid working directory path.";
+                }
             }
 
             try

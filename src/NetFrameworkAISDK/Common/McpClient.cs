@@ -19,7 +19,8 @@ namespace NetFrameworkAISDK.Common
         private int _requestId;
         private bool _initialized;
         private bool _disposed;
-        private bool _aborted;
+        private volatile bool _aborted;
+        private volatile bool _readCancelled;
         private int _timeoutMilliseconds;
         private readonly object _sendLock;
 
@@ -78,6 +79,18 @@ namespace NetFrameworkAISDK.Common
 
                 _process = new Process { StartInfo = psi };
                 _process.Start();
+
+                if (!_process.WaitForInputIdle(2000))
+                {
+                    if (_process.HasExited)
+                    {
+                        int exitCode = _process.ExitCode;
+                        _process.Dispose();
+                        _process = null;
+                        return new ApiResponse<bool> { Error = new ApiError("MCP server process exited immediately with code: " + exitCode) };
+                    }
+                }
+
                 _stdin = new StreamWriter(_process.StandardInput.BaseStream, Encoding.UTF8);
                 _stdout = new StreamReader(_process.StandardOutput.BaseStream, Encoding.UTF8);
                 _requestId = 0;
@@ -86,6 +99,11 @@ namespace NetFrameworkAISDK.Common
             }
             catch (Exception ex)
             {
+                if (_process != null)
+                {
+                    try { _process.Dispose(); } catch { }
+                    _process = null;
+                }
                 return new ApiResponse<bool> { Error = new ApiError("Failed to connect MCP server: " + ex.Message) };
             }
         }
@@ -251,8 +269,9 @@ namespace NetFrameworkAISDK.Common
             if (!_disposed)
             {
                 _disposed = true;
-                _aborted = true;
                 Shutdown();
+                _aborted = true;
+                _readCancelled = true;
                 if (_stdin != null) { try { _stdin.Close(); } catch { } }
                 if (_stdout != null) { try { _stdout.Close(); } catch { } }
                 if (_process != null)
@@ -271,8 +290,17 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
+        /// 重置客户端状态，允许在超时后重新使用
+        /// </summary>
+        public void Reset()
+        {
+            _aborted = false;
+            _readCancelled = false;
+        }
+
+        /// <summary>
         /// 从标准输出读取一行，带超时保护。
-        /// 使用独立线程 + Join 超时，避免 Task 泄漏问题。
+        /// 使用独立线程 + 取消标志，避免线程泄漏问题。
         /// </summary>
         /// <param name="timeoutMs">超时毫秒数</param>
         /// <returns>读取的行，超时返回 null</returns>
@@ -288,7 +316,15 @@ namespace NetFrameworkAISDK.Common
             {
                 try
                 {
-                    result = _stdout.ReadLine();
+                    while (!_readCancelled)
+                    {
+                        if (_stdout.Peek() >= 0)
+                        {
+                            result = _stdout.ReadLine();
+                            break;
+                        }
+                        Thread.Sleep(50);
+                    }
                 }
                 catch (Exception)
                 {
@@ -303,7 +339,8 @@ namespace NetFrameworkAISDK.Common
                 return result;
             }
 
-            _aborted = true;
+            _readCancelled = true;
+            Thread.Sleep(100);
             return null;
         }
 
@@ -334,7 +371,6 @@ namespace NetFrameworkAISDK.Common
                 string responseLine = ReadLineWithTimeout(_timeoutMilliseconds);
                 if (responseLine == null)
                 {
-                    _aborted = true;
                     return new ApiResponse<object>
                     {
                         Error = new ApiError("MCP request timed out after " + _timeoutMilliseconds + "ms")

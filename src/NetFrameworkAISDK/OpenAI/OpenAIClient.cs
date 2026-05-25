@@ -183,6 +183,14 @@ namespace NetFrameworkAISDK.OpenAI
                         var delta = streamResponse.Choices[0].Delta;
                         if (delta != null)
                         {
+                            bool hasContent = !string.IsNullOrEmpty(delta.Content);
+                            bool hasToolCalls = delta.ToolCalls != null && delta.ToolCalls.Count > 0;
+
+                            if (!hasContent && !hasToolCalls)
+                            {
+                                return;
+                            }
+
                             var convResp = new ConversationResponse
                             {
                                 Model = streamResponse.Model,
@@ -190,7 +198,7 @@ namespace NetFrameworkAISDK.OpenAI
                                 FinishReason = streamResponse.Choices[0].FinishReason
                             };
 
-                            if (delta.ToolCalls != null && delta.ToolCalls.Count > 0)
+                            if (hasToolCalls)
                             {
                                 convResp.ToolCalls = new List<ToolCallRequest>();
                                 foreach (var tc in delta.ToolCalls)

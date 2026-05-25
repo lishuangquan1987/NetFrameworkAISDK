@@ -157,6 +157,14 @@ namespace NetFrameworkAISDK.Common
                         {
                             args[i] = Convert.ChangeType(value, targetType);
                         }
+                        else if (targetType.IsEnum)
+                        {
+                            args[i] = Enum.Parse(targetType, value.ToString());
+                        }
+                        else if (typeof(IConvertible).IsAssignableFrom(targetType))
+                        {
+                            args[i] = Convert.ChangeType(value, targetType);
+                        }
                         else
                         {
                             var json = JsonHelper.Serialize(value);

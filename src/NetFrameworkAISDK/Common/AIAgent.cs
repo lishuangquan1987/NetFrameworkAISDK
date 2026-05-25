@@ -368,6 +368,15 @@ namespace NetFrameworkAISDK.Common
         {
             if (remainingIterations <= 0)
             {
+                if (_conversationHistory.Count > 0)
+                {
+                    var lastMsg = _conversationHistory[_conversationHistory.Count - 1];
+                    if (!string.IsNullOrEmpty(lastMsg.Content))
+                    {
+                        onUpdate(lastMsg.Content);
+                    }
+                }
+                onError(new ApiError("Agent loop exceeded maximum iterations."));
                 return;
             }
 

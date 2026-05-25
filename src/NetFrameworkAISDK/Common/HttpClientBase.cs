@@ -234,7 +234,8 @@ namespace NetFrameworkAISDK.Common
             {
                 if (ShouldRetry(ex, attempt))
                 {
-                    Thread.Sleep(RetryDelayMilliseconds * (attempt + 1));
+                    int delay = RetryDelayMilliseconds * (int)Math.Pow(2, attempt);
+                    Thread.Sleep(delay);
                     return RequestWithRetry<T>(method, endpoint, data, queryParams, attempt + 1);
                 }
                 return HandleWebException<T>(ex);
@@ -243,7 +244,8 @@ namespace NetFrameworkAISDK.Common
             {
                 if (IsTransientException(ex) && attempt < MaxRetries)
                 {
-                    Thread.Sleep(RetryDelayMilliseconds * (attempt + 1));
+                    int delay = RetryDelayMilliseconds * (int)Math.Pow(2, attempt);
+                    Thread.Sleep(delay);
                     return RequestWithRetry<T>(method, endpoint, data, queryParams, attempt + 1);
                 }
                 return new ApiResponse<T> { Error = new ApiError(ex.Message) };

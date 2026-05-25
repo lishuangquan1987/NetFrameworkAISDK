@@ -145,7 +145,10 @@ namespace NetFrameworkAISDK.Common
                 {
                     var name = _naming.GetPropertyName(prop.Name, false);
                     properties[name] = propSchema;
-                    required.Add(name);
+                    if (!IsNullable(prop.PropertyType))
+                    {
+                        required.Add(name);
+                    }
                 }
             }
 
