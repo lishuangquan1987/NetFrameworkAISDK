@@ -242,42 +242,25 @@ namespace NetFrameworkAISDK.Common
                 int maxMatches = 200;
                 var result = new StringBuilder();
 
-                pattern = pattern.Replace('/', '\\');
-                string searchRoot = searchPath;
-                string filePattern = pattern;
-                bool recurse = false;
+                // 展开花括号：{a,b} → 多个独立模式
+                var patterns = ExpandBraces(pattern);
 
-                int starStarIndex = pattern.IndexOf("**");
-                if (starStarIndex >= 0)
+                foreach (var expandedPattern in patterns)
                 {
-                    recurse = true;
-                    if (starStarIndex > 0)
+                    if (matchCount >= maxMatches) { break; }
+
+                    var normalized = expandedPattern.Replace('/', '\\');
+
+                    if (normalized.Contains("**"))
                     {
-                        string prefix = pattern.Substring(0, starStarIndex).TrimEnd('\\');
-                        searchRoot = System.IO.Path.Combine(searchPath, prefix);
-                    }
-                    if (starStarIndex + 2 < pattern.Length)
-                    {
-                        filePattern = pattern.Substring(starStarIndex + 2).TrimStart('\\');
+                        // 多段 ** 模式：按 ** 拆分为目录段 + 最终文件模式
+                        CollectWithMultiStar(searchPath, normalized, result, ref matchCount, maxMatches);
                     }
                     else
                     {
-                        filePattern = "*";
+                        // 无 **：在当前目录单层匹配
+                        CollectFlat(searchPath, normalized, result, ref matchCount, maxMatches);
                     }
-                }
-
-                if (!Directory.Exists(searchRoot))
-                {
-                    return "Error: Directory not found: " + searchRoot;
-                }
-
-                SearchOption searchOption = recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                var matches = System.IO.Directory.GetFiles(searchRoot, filePattern, searchOption);
-                foreach (var f in matches)
-                {
-                    if (matchCount >= maxMatches) { break; }
-                    result.AppendLine(f);
-                    matchCount++;
                 }
 
                 if (matchCount == 0)
@@ -291,6 +274,215 @@ namespace NetFrameworkAISDK.Common
             {
                 return "Error globbing: " + ex.Message;
             }
+        }
+
+        /// <summary>
+        /// 展开 {a,b,c} 花括号模式为多个独立模式
+        /// </summary>
+        private static List<string> ExpandBraces(string pattern)
+        {
+            var results = new List<string>();
+
+            int openBrace = pattern.IndexOf('{');
+            if (openBrace < 0)
+            {
+                results.Add(pattern);
+                return results;
+            }
+
+            int closeBrace = pattern.IndexOf('}', openBrace);
+            if (closeBrace < 0)
+            {
+                results.Add(pattern);
+                return results;
+            }
+
+            string prefix = pattern.Substring(0, openBrace);
+            string suffix = pattern.Substring(closeBrace + 1);
+            string braceContent = pattern.Substring(openBrace + 1, closeBrace - openBrace - 1);
+
+            var options = braceContent.Split(',');
+            foreach (var option in options)
+            {
+                var trimmed = option.Trim();
+                if (trimmed.Length > 0)
+                {
+                    var combined = prefix + trimmed + suffix;
+                    // 递归展开嵌套花括号
+                    var nested = ExpandBraces(combined);
+                    results.AddRange(nested);
+                }
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// 按 ** 拆分后递归遍历目录树，匹配最终文件模式
+        /// </summary>
+        private static void CollectWithMultiStar(string basePath, string pattern, StringBuilder result, ref int count, int max)
+        {
+            // 按 ** 分割：第一段是目录前缀，后续段是递归目录 + 文件模式
+            int firstStar = pattern.IndexOf("**");
+            string prefix = "";
+            string remainder = pattern;
+
+            if (firstStar > 0)
+            {
+                prefix = pattern.Substring(0, firstStar).TrimEnd('\\');
+                remainder = pattern.Substring(firstStar + 2).TrimStart('\\');
+            }
+            else if (firstStar == 0)
+            {
+                remainder = pattern.Substring(2).TrimStart('\\');
+            }
+
+            string searchRoot = string.IsNullOrEmpty(prefix)
+                ? basePath
+                : System.IO.Path.Combine(basePath, prefix);
+
+            if (!Directory.Exists(searchRoot))
+            {
+                return;
+            }
+
+            // 如果剩余部分还有 **，递归遍历子目录
+            if (remainder.Contains("**"))
+            {
+                WalkDirectoriesForMultiStar(searchRoot, remainder, result, ref count, max);
+            }
+            else
+            {
+                // 最后一层：在当前目录中匹配文件
+                WalkDirectoriesForFile(searchRoot, remainder, result, ref count, max);
+            }
+        }
+
+        /// <summary>
+        /// 递归遍历目录，对每个子目录按剩余模式继续匹配
+        /// </summary>
+        private static void WalkDirectoriesForMultiStar(string root, string remainder, StringBuilder result, ref int count, int max)
+        {
+            // 先尝试在当前目录直接匹配
+            if (Directory.Exists(root))
+            {
+                try
+                {
+                    foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly))
+                    {
+                        if (count >= max) { return; }
+                        result.AppendLine(file);
+                        count++;
+                    }
+                }
+                catch { }
+
+                // 然后递归子目录
+                try
+                {
+                    foreach (var subDir in Directory.EnumerateDirectories(root))
+                    {
+                        if (count >= max) { return; }
+                        // 在每个子目录中继续处理余下的 ** 模式
+                        int nextStar = remainder.IndexOf("**");
+                        string afterStar = remainder.Substring(nextStar + 2).TrimStart('\\');
+                        if (afterStar.Contains("**"))
+                        {
+                            WalkDirectoriesForMultiStar(subDir, afterStar, result, ref count, max);
+                        }
+                        else if (string.IsNullOrEmpty(afterStar) || afterStar == "*")
+                        {
+                            // 模式以 ** 结束，列出所有子文件
+                            CollectAllFiles(subDir, result, ref count, max);
+                        }
+                        else
+                        {
+                            WalkDirectoriesForFile(subDir, afterStar, result, ref count, max);
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// 在指定目录下递归搜索匹配文件模式的路径
+        /// </summary>
+        private static void WalkDirectoriesForFile(string root, string filePattern, StringBuilder result, ref int count, int max)
+        {
+            if (count >= max) { return; }
+            if (!Directory.Exists(root)) { return; }
+
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(root, filePattern, SearchOption.TopDirectoryOnly))
+                {
+                    if (count >= max) { return; }
+                    result.AppendLine(file);
+                    count++;
+                }
+            }
+            catch { }
+
+            try
+            {
+                foreach (var subDir in Directory.EnumerateDirectories(root))
+                {
+                    if (count >= max) { return; }
+                    WalkDirectoriesForFile(subDir, filePattern, result, ref count, max);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 递归收集目录下的所有文件
+        /// </summary>
+        private static void CollectAllFiles(string root, StringBuilder result, ref int count, int max)
+        {
+            if (count >= max) { return; }
+            if (!Directory.Exists(root)) { return; }
+
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly))
+                {
+                    if (count >= max) { return; }
+                    result.AppendLine(file);
+                    count++;
+                }
+            }
+            catch { }
+
+            try
+            {
+                foreach (var subDir in Directory.EnumerateDirectories(root))
+                {
+                    if (count >= max) { return; }
+                    CollectAllFiles(subDir, result, ref count, max);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 在当前目录单层匹配（无 ** 递归）
+        /// </summary>
+        private static void CollectFlat(string basePath, string filePattern, StringBuilder result, ref int count, int max)
+        {
+            if (count >= max) { return; }
+            if (!Directory.Exists(basePath)) { return; }
+
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(basePath, filePattern, SearchOption.TopDirectoryOnly))
+                {
+                    if (count >= max) { return; }
+                    result.AppendLine(file);
+                    count++;
+                }
+            }
+            catch { }
         }
 
         [Description("Delete a file at the given path")]
@@ -534,7 +726,7 @@ namespace NetFrameworkAISDK.Common
             try
             {
                 _logger.Log(string.Format("Executing command: {0}", command), "INFO");
-                
+
                 using (var process = new System.Diagnostics.Process())
                 {
                     process.StartInfo.FileName = "cmd.exe";

@@ -380,9 +380,19 @@ namespace NetFrameworkAISDK.Common
 
             if (!hasToolCalls)
             {
+                var metadata = new ApiResponseMetadata();
+                if (!string.IsNullOrEmpty(result.Model))
+                {
+                    metadata.Model = result.Model;
+                }
+                if (!string.IsNullOrEmpty(result.FinishReason))
+                {
+                    metadata.FinishReason = result.FinishReason;
+                }
                 return new ApiResponse<string>
                 {
-                    Result = result.Content != null ? result.Content : ""
+                    Result = result.Content != null ? result.Content : "",
+                    Metadata = metadata
                 };
             }
 
@@ -753,14 +763,6 @@ namespace NetFrameworkAISDK.Common
                 Content = userMessage,
                 ContentParts = contentParts
             });
-        }
-
-        /// <summary>
-        /// 清空对话历史
-        /// </summary>
-        public void ClearHistory()
-        {
-            _conversationHistory.Clear();
         }
 
         /// <summary>

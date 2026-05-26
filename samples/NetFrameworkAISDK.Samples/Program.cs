@@ -15,7 +15,7 @@ namespace NetFrameworkAISDK.Samples
             {
                 ShowMenu();
                 var input = Console.ReadLine();
-                
+
                 switch (input)
                 {
                     case "1":
@@ -99,9 +99,4 @@ namespace NetFrameworkAISDK.Samples
         }
     }
 
-    interface ISample
-    {
-        string Name { get; }
-        void Run();
-    }
 }
