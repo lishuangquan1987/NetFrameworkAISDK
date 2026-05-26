@@ -29,7 +29,8 @@ namespace NetFrameworkAISDK.Common
             get { return _parametersDictionary; }
             set
             {
-                if (value is Dictionary<string, object> dict)
+                var dict = value as Dictionary<string, object>;
+                if (dict != null)
                 {
                     _parametersDictionary = dict;
                 }
