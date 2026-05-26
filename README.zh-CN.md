@@ -1,6 +1,6 @@
 # NetFrameworkAISDK
 
-> **面向 .NET Framework 4.0+ 的 OpenAI & Anthropic SDK** — AI Agent、工具调用、结构化输出、MCP 客户端、技能管理。
+> **面向 .NET Framework 4.0+ / .NET Standard 2.0 的 OpenAI & Anthropic SDK** — AI Agent、工具调用、结构化输出、MCP 客户端、技能管理。
 
 [![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.0+-5C2D91)](https://dotnet.microsoft.com/download/dotnet-framework)
 [![NuGet](https://img.shields.io/nuget/v/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
@@ -9,7 +9,7 @@
 
 [🇬🇧 English Documentation](README.md)
 
-NetFrameworkAISDK 为传统的 .NET Framework 4.0+ 项目带来了现代化的 AI 能力。它在 OpenAI 和 Anthropic API 之上提供了统一接口，并内置了自动处理多轮工具调用、结构化 JSON 输出、技能管理的 AI Agent。
+NetFrameworkAISDK 为传统的 .NET Framework 4.0+ 和 .NET Standard 2.0 项目带来了现代化的 AI 能力。它在 OpenAI 和 Anthropic API 之上提供了统一接口，并内置了自动处理多轮工具调用、结构化 JSON 输出、技能管理的 AI Agent。
 
 ---
 
@@ -44,7 +44,7 @@ NetFrameworkAISDK 为传统的 .NET Framework 4.0+ 项目带来了现代化的 A
 - **MCP 客户端** — 内置 Model Control Protocol 客户端，可连接 MCP 服务器并将其工具注入为原生 `AIFunction` 实例。
 - **技能管理器** — MAF 风格的渐进式技能披露。仅在 system prompt 中注入技能摘要，通过 `load_skill` 工具调用按需加载完整内容。
 - **内置 Agent 工具** — 文件读写、代码搜索、目录列举等工具开箱即用。
-- **.NET 4.0+** — 完全兼容 .NET Framework 4.0，不使用 C# 6.0+ 特性。默认启用 TLS 1.2。
+- **.NET 4.0+ / .NET Standard 2.0** — 兼容 .NET Framework 4.0+ 和 .NET Standard 2.0，不使用 C# 6.0+ 特性。默认启用 TLS 1.2。
 
 ---
 
@@ -302,7 +302,7 @@ var agent = new AIAgent(client, model, instructions, tools, includeDefaultTools,
 
 ## 环境要求
 
-- .NET Framework 4.0 或更高版本
+- .NET Framework 4.0 或更高版本，或 .NET Standard 2.0 兼容运行时（如 .NET Core 2.0+）
 - Newtonsoft.Json 13.0.1（NuGet 自动还原）
 
 ---

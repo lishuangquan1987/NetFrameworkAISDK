@@ -1,6 +1,6 @@
 # NetFrameworkAISDK SDK
 
-**OpenAI & Anthropic SDK for .NET Framework 4.0+** — AI Agent, tool calling, structured output, MCP client, skill management.
+**OpenAI & Anthropic SDK for .NET Framework 4.0+ / .NET Standard 2.0** — AI Agent, tool calling, structured output, MCP client, skill management.
 
 [![NuGet](https://img.shields.io/nuget/v/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
@@ -127,6 +127,6 @@ mcp.Initialize();
 
 ## Requirements
 
-- .NET Framework 4.0 or later
+- .NET Framework 4.0 or later, or .NET Standard 2.0 compatible runtime (e.g. .NET Core 2.0+)
 - Newtonsoft.Json 13.0.1 (auto-restored)
 

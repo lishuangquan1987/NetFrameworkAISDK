@@ -7,7 +7,7 @@
   - NetFrameworkAISDK - 核心命名空间
   - NetFrameworkAISDK.OpenAI - OpenAI 相关功能
   - NetFrameworkAISDK.Anthropic - Anthropic 相关功能
-- **目标框架**：.NET Framework 4.0+
+- **目标框架**：.NET Framework 4.0+ / .NET Standard 2.0
 
 ## 技术栈约束
 - .NET Framework 4.0+ 兼容性：禁止使用 C# 6.0+ 特性
@@ -42,7 +42,7 @@ SkillManager 为实例类，构造时自动扫描目录，运行时通过 Ensure
 - nameof -> 直接写字符串
 
 ## 验证标准
-1. 代码兼容 .NET Framework 4.0
+1. 代码兼容 .NET Framework 4.0 和 .NET Standard 2.0
 3. JSON 使用强类型类 + SnakeCaseNamingStrategy
 4. 遵循现有代码风格
 5. 无未请求的功能

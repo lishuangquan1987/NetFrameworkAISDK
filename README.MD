@@ -1,6 +1,6 @@
 # NetFrameworkAI
 
-> **OpenAI & Anthropic SDK for .NET Framework 4.0+** — AI Agent, tool calling, structured output, MCP client, skill management.
+> **OpenAI & Anthropic SDK for .NET Framework 4.0+ / .NET Standard 2.0** — AI Agent, tool calling, structured output, MCP client, skill management.
 
 [![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.0+-5C2D91)](https://dotnet.microsoft.com/download/dotnet-framework)
 [![NuGet](https://img.shields.io/nuget/v/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
@@ -9,7 +9,7 @@
 
 [🇨🇳 中文文档](README.zh-CN.md)
 
-NetFrameworkAI brings modern AI capabilities to legacy .NET Framework 4.0+ projects. It provides a unified interface over OpenAI and Anthropic APIs, with a built-in AI Agent that handles multi-turn tool calling, structured JSON output, and skill management automatically.
+NetFrameworkAI brings modern AI capabilities to legacy .NET Framework 4.0+ and .NET Standard 2.0 projects. It provides a unified interface over OpenAI and Anthropic APIs, with a built-in AI Agent that handles multi-turn tool calling, structured JSON output, and skill management automatically.
 
 ---
 
@@ -44,7 +44,7 @@ NetFrameworkAI brings modern AI capabilities to legacy .NET Framework 4.0+ proje
 - **MCP Client** — Built-in Model Control Protocol client for connecting MCP servers and injecting their tools as native `AIFunction` instances.
 - **Skill Manager** — MAF-style progressive skill disclosure. Injects only skill summaries into the system prompt; full content loads on demand via `load_skill` tool calls.
 - **Built-in Agent Tools** — File read/write, code search, directory listing tools ready to use.
-- **.NET 4.0+** — Fully compatible with .NET Framework 4.0, no C# 6.0+ features used. TLS 1.2 enabled by default.
+- **.NET 4.0+ / .NET Standard 2.0** — Compatible with .NET Framework 4.0+ and .NET Standard 2.0, no C# 6.0+ features used. TLS 1.2 enabled by default.
 
 ---
 
@@ -302,7 +302,7 @@ var agent = new AIAgent(client, model, instructions, tools, includeDefaultTools,
 
 ## Requirements
 
-- .NET Framework 4.0 or later
+- .NET Framework 4.0 or later, or .NET Standard 2.0 compatible runtime (e.g. .NET Core 2.0+)
 - Newtonsoft.Json 13.0.1 (auto-restored by NuGet)
 
 ---

@@ -11,7 +11,7 @@
     <repository type="git" url="https://github.com/lishuangquan1987/NetFrameworkAISDK" />
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>
-      OpenAI and Anthropic SDK for .NET Framework 4.0+.
+      OpenAI and Anthropic SDK for .NET Framework 4.0+ and .NET Standard 2.0.
 
       Features:
       - Unified IAIClient interface for both OpenAI and Anthropic
@@ -21,9 +21,9 @@
       - MCP (Model Control Protocol) client support
       - Multi-modal (text + image) content support
       - Structured JSON output with generic type support
-      - Compatible with .NET Framework 4.0+ (no C# 6.0+ features)
+      - Compatible with .NET Framework 4.0+ and .NET Standard 2.0 (no C# 6.0+ features)
     </description>
-    <summary>OpenAI &amp; Anthropic SDK for .NET Framework 4.0+ with AI Agent, tool calling, MCP client, and skill management.</summary>
+    <summary>OpenAI &amp; Anthropic SDK for .NET Framework 4.0+ and .NET Standard 2.0 with AI Agent, tool calling, MCP client, and skill management.</summary>
     <releaseNotes>https://github.com/NetFrameworkAI/NetFrameworkAI-SDK/releases</releaseNotes>
     <copyright>Copyright © 2026</copyright>
     <language>en-US</language>
@@ -34,8 +34,10 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\NetFrameworkAISDK.dll" target="lib\net40\NetFrameworkAISDK.dll" />
-    <file src="bin\Release\NetFrameworkAISDK.xml" target="lib\net40\NetFrameworkAISDK.xml" />
+    <file src="bin\Release\net40\NetFrameworkAISDK.dll" target="lib\net40\NetFrameworkAISDK.dll" />
+    <file src="bin\Release\net40\NetFrameworkAISDK.xml" target="lib\net40\NetFrameworkAISDK.xml" />
+    <file src="bin\Release\netstandard2.0\NetFrameworkAISDK.dll" target="lib\netstandard2.0\NetFrameworkAISDK.dll" />
+    <file src="bin\Release\netstandard2.0\NetFrameworkAISDK.xml" target="lib\netstandard2.0\NetFrameworkAISDK.xml" />
     <file src="README.nuget.md" target="README.nuget.md" />
   </files>
 </package>
