@@ -104,7 +104,7 @@ namespace NetFrameworkAISDK.Tests.Common
         public void Run_WithToolCall_ExecutesToolAndReturnsFinalResponse()
         {
             var mock = new MockAIClient();
-            mock.OnSendConversation = delegate(List<ConversationMessage> messages, ConversationOptions options)
+            mock.OnSendConversation = delegate (List<ConversationMessage> messages, ConversationOptions options)
             {
                 if (mock.CallCount == 1)
                 {
@@ -131,7 +131,7 @@ namespace NetFrameworkAISDK.Tests.Common
                 };
             };
             var toolFunc = AIFunction.Create(
-                new Func<string>(delegate() { return "Tool result"; }), "Test tool", "test_tool");
+                new Func<string>(delegate () { return "Tool result"; }), "Test tool", "test_tool");
             var agent = new AIAgent(mock, "test-model", "System.",
                 new[] { toolFunc }, false, null);
 
@@ -158,7 +158,7 @@ namespace NetFrameworkAISDK.Tests.Common
                 }
             };
             var loopTool = AIFunction.Create(
-                new Func<string>(delegate() { return "looping"; }), "Loops forever", "loop_tool");
+                new Func<string>(delegate () { return "looping"; }), "Loops forever", "loop_tool");
             var agent = new AIAgent(mock, "test-model", "System.",
                 new[] { loopTool }, false, null);
             agent.MaxIterations = 1;
@@ -197,7 +197,7 @@ namespace NetFrameworkAISDK.Tests.Common
         public void AddTool_DynamicTool_BecomesCallable()
         {
             var mock = new MockAIClient();
-            mock.OnSendConversation = delegate(List<ConversationMessage> messages, ConversationOptions options)
+            mock.OnSendConversation = delegate (List<ConversationMessage> messages, ConversationOptions options)
             {
                 if (mock.CallCount == 1)
                 {
@@ -226,7 +226,7 @@ namespace NetFrameworkAISDK.Tests.Common
 
             var agent = new AIAgent(mock, "test-model", "System.", null, false, null);
             var dynTool = AIFunction.Create(
-                new Func<string>(delegate() { return "dynamic result"; }), "Dynamic tool", "dynamic_tool");
+                new Func<string>(delegate () { return "dynamic result"; }), "Dynamic tool", "dynamic_tool");
             agent.AddTool(dynTool);
 
             var response = agent.Run("Trigger");
@@ -240,7 +240,7 @@ namespace NetFrameworkAISDK.Tests.Common
         public void AgentLoop_WithToolApproval_Rejected()
         {
             var mock = new MockAIClient();
-            mock.OnSendConversation = delegate(List<ConversationMessage> messages, ConversationOptions options)
+            mock.OnSendConversation = delegate (List<ConversationMessage> messages, ConversationOptions options)
             {
                 return new ApiResponse<ConversationResponse>
                 {
@@ -260,19 +260,19 @@ namespace NetFrameworkAISDK.Tests.Common
                 };
             };
             var toolFunc = AIFunction.Create(
-                new Func<string>(delegate() { return "executed"; }), "Dangerous tool", "dangerous_tool");
+                new Func<string>(delegate () { return "executed"; }), "Dangerous tool", "dangerous_tool");
             toolFunc.RequiresApproval = true;
             var agent = new AIAgent(mock, "test-model", "System.",
                 new[] { toolFunc }, false, null);
-            agent.ToolApproval = delegate(ToolCallEventArgs args) { return false; };
+            agent.ToolApproval = delegate (ToolCallEventArgs args) { return false; };
 
             var toolCallLog = new List<ToolCallEventArgs>();
-            var response = agent.Run("Do it", delegate(ToolCallEventArgs args) { toolCallLog.Add(args); });
+            var response = agent.Run("Do it", delegate (ToolCallEventArgs args) { toolCallLog.Add(args); });
 
             Assert.IsTrue(response.IsSuccess);
             // 即使被拒绝，onToolCall 回调也应该被调用
             Assert.AreEqual(1, toolCallLog.Count);
-            Assert.IsFalse(toolCallLog[0].IsApproved);
+            Assert.AreEqual(false, toolCallLog[0].IsApproved);
             Assert.AreEqual("[REJECTED]", toolCallLog[0].Result);
         }
     }
