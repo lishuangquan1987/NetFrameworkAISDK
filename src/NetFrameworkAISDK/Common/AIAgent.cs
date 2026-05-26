@@ -587,6 +587,17 @@ namespace NetFrameworkAISDK.Common
                         });
                     }
                 }
+                else
+                {
+                    // 工具未注册：添加错误结果，确保对话历史完整
+                    AddToHistory(new ConversationMessage
+                    {
+                        Role = MessageRole.Tool,
+                        Name = functionName,
+                        ToolCallId = toolCall.Id,
+                        Content = "Error: Tool '" + functionName + "' not found."
+                    });
+                }
             }
 
             StreamingLoop(onUpdate, onError, onToolCall, remainingIterations - 1);
@@ -666,6 +677,16 @@ namespace NetFrameworkAISDK.Common
                             ToolCallId = toolCall.Id
                         });
                     }
+                }
+                else
+                {
+                    AddToHistory(new ConversationMessage
+                    {
+                        Role = MessageRole.Tool,
+                        Name = functionName,
+                        ToolCallId = toolCall.Id,
+                        Content = "Error: Tool '" + functionName + "' not found."
+                    });
                 }
             }
         }

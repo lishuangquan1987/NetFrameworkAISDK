@@ -246,7 +246,7 @@ namespace NetFrameworkAISDK.OpenAI
                 var chatMsg = new ChatMessage
                 {
                     Role = msg.Role,
-                    Name = msg.Name,
+                    Name = msg.Name ?? "",
                     ToolCallId = msg.ToolCallId
                 };
 
