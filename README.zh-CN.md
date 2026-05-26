@@ -292,10 +292,10 @@ var agent = new AIAgent(client, "gpt-4o", "...", mcpFunctions);
 var agent = AIAgent.CreateMinimal(client, model, instructions, extraTools);
 
 // 带默认工具+技能的 Agent
-var agent = AIAgent.CreateWithDefaults(client, model, instructions, skillsDirectory, extraTools);
+var agent = AIAgent.CreateWithDefaults(client, model, instructions, skillsDirectories, extraTools);
 
 // 完整构造函数
-var agent = new AIAgent(client, model, instructions, tools, includeDefaultTools, skillsDirectory);
+var agent = new AIAgent(client, model, instructions, tools, includeDefaultTools, skillsDirectories);
 ```
 
 ---

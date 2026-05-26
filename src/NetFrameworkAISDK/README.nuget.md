@@ -103,7 +103,7 @@ agent.RunStreaming("Tell me a story",
 ```csharp
 var agent = AIAgent.CreateWithDefaults(
     client, "gpt-4o", "You are a coding assistant.",
-    "./skills", new[] { myCustomTool });
+    new[] { "./skills" }, new[] { myCustomTool });
 ```
 
 ### MCP Tools

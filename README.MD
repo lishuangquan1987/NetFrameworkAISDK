@@ -230,8 +230,8 @@ MAF-style skill loading — only skill summaries go into the system prompt; full
 var agent = AIAgent.CreateWithDefaults(
     client, "gpt-4o",
     "You are a coding assistant.",
-    "./skills",                    // skill directory (auto-discovered)
-    new[] { myCustomTool });       // extra tools
+    new[] { "./skills" },           // skill directory (auto-discovered)
+    new[] { myCustomTool });          // extra tools
 ```
 
 Or manually:
@@ -292,10 +292,10 @@ var agent = new AIAgent(client, "gpt-4o", "...", mcpFunctions);
 var agent = AIAgent.CreateMinimal(client, model, instructions, extraTools);
 
 // Agent with default tools + skills
-var agent = AIAgent.CreateWithDefaults(client, model, instructions, skillsDirectory, extraTools);
+var agent = AIAgent.CreateWithDefaults(client, model, instructions, skillsDirectories, extraTools);
 
 // Full constructor
-var agent = new AIAgent(client, model, instructions, tools, includeDefaultTools, skillsDirectory);
+var agent = new AIAgent(client, model, instructions, tools, includeDefaultTools, skillsDirectories);
 ```
 
 ---
