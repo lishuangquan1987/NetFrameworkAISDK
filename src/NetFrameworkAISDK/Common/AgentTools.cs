@@ -761,6 +761,10 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
+        /// <summary>
+        /// 创建默认工具集，通过反射发现所有标记 [Description] 的私有静态方法
+        /// </summary>
+        /// <returns>工具函数列表</returns>
         public static List<AIFunction> CreateDefaultTools()
         {
             var tools = new List<AIFunction>();

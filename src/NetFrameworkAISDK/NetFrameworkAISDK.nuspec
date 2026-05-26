@@ -34,8 +34,8 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\NetFrameworkAISDK.dll" target="lib\net40\NetFrameworkAISDK.dll" />
-    <file src="bin\Release\NetFrameworkAISDK.xml" target="lib\net40\NetFrameworkAISDK.xml" />
+    <file src="bin\Release\net40\NetFrameworkAISDK.dll" target="lib\net40\NetFrameworkAISDK.dll" />
+    <file src="bin\Release\net40\NetFrameworkAISDK.xml" target="lib\net40\NetFrameworkAISDK.xml" />
     <file src="bin\Release\netstandard2.0\NetFrameworkAISDK.dll" target="lib\netstandard2.0\NetFrameworkAISDK.dll" />
     <file src="bin\Release\netstandard2.0\NetFrameworkAISDK.xml" target="lib\netstandard2.0\NetFrameworkAISDK.xml" />
     <file src="README.nuget.md" target="README.nuget.md" />

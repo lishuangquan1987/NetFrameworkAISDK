@@ -77,6 +77,7 @@ namespace NetFrameworkAISDK.OpenAI
         /// <param name="temperature">温度参数 0-2（可选）</param>
         /// <param name="maxTokens">最大生成 token 数（可选）</param>
         /// <param name="tools">工具定义列表（可选）</param>
+        /// <param name="responseFormat">响应格式（可选，用于结构化输出）</param>
         public void CreateChatCompletionStream(
             string model,
             List<ChatMessage> messages,
