@@ -151,8 +151,19 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         private static string BuildQueryString(object queryParams)
         {
-            string json = JsonHelper.Serialize(queryParams);
-            var dict = JsonHelper.Deserialize<Dictionary<string, object>>(json);
+            // 直接处理 Dictionary<string, object>，避免双重序列化
+            Dictionary<string, object> dict;
+            if (queryParams is Dictionary<string, object>)
+            {
+                dict = (Dictionary<string, object>)queryParams;
+            }
+            else
+            {
+                // 对于匿名对象，仍需序列化-反序列化
+                string json = JsonHelper.Serialize(queryParams);
+                dict = JsonHelper.Deserialize<Dictionary<string, object>>(json);
+            }
+            
             var parts = new List<string>();
             foreach (var kvp in dict)
             {

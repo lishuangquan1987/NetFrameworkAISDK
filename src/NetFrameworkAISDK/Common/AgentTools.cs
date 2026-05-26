@@ -16,10 +16,48 @@ namespace NetFrameworkAISDK.Common
     {
         private static readonly ILogger _logger = new ConsoleLogger();
 
+        /// <summary>
+        /// 允许访问的根目录路径。设置后，所有文件操作都将限制在此目录及其子目录内。
+        /// 设为 null 表示不限制（默认）。
+        /// </summary>
+        public static string AllowedRootPath { get; set; }
+
+        /// <summary>
+        /// 验证路径是否在允许范围内
+        /// </summary>
+        private static bool IsPathAllowed(string path)
+        {
+            if (string.IsNullOrEmpty(AllowedRootPath))
+            {
+                return true;
+            }
+            try
+            {
+                string fullPath = System.IO.Path.GetFullPath(path);
+                string fullRoot = System.IO.Path.GetFullPath(AllowedRootPath);
+                return fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string ValidatePath(string path)
+        {
+            if (!IsPathAllowed(path))
+            {
+                return "Error: Path is outside allowed directory: " + (AllowedRootPath ?? "(not set)");
+            }
+            return null;
+        }
+
         [Description("Read the contents of a file at the given path")]
         private static string ReadFile([Description("Absolute or relative path to the file")] string path)
         {
             if (string.IsNullOrEmpty(path)) { return "Error: path is required."; }
+            string pathError = ValidatePath(path);
+            if (pathError != null) { return pathError; }
 
             try
             {
@@ -42,6 +80,8 @@ namespace NetFrameworkAISDK.Common
         {
             if (string.IsNullOrEmpty(path)) { return "Error: path is required."; }
             if (content == null) { return "Error: content is required."; }
+            string pathError = ValidatePath(path);
+            if (pathError != null) { return pathError; }
 
             try
             {
@@ -65,6 +105,8 @@ namespace NetFrameworkAISDK.Common
             [Description("Optional glob pattern to filter results (e.g. *.cs, *.md)")] string pattern = null)
         {
             if (string.IsNullOrEmpty(path)) { return "Error: path is required."; }
+            string pathError = ValidatePath(path);
+            if (pathError != null) { return pathError; }
 
             try
             {
@@ -255,6 +297,8 @@ namespace NetFrameworkAISDK.Common
         private static string DeleteFile([Description("Absolute or relative path to the file")] string path)
         {
             if (string.IsNullOrEmpty(path)) { return "Error: path is required."; }
+            string pathError = ValidatePath(path);
+            if (pathError != null) { return pathError; }
 
             try
             {
@@ -275,6 +319,8 @@ namespace NetFrameworkAISDK.Common
         private static string MakeDirectory([Description("Absolute path to create directory")] string path)
         {
             if (string.IsNullOrEmpty(path)) { return "Error: path is required."; }
+            string pathError = ValidatePath(path);
+            if (pathError != null) { return pathError; }
 
             try
             {
@@ -368,6 +414,10 @@ namespace NetFrameworkAISDK.Common
         {
             if (string.IsNullOrEmpty(sourcePath)) { return "Error: sourcePath is required."; }
             if (string.IsNullOrEmpty(destPath)) { return "Error: destPath is required."; }
+            string pathError = ValidatePath(sourcePath);
+            if (pathError != null) { return pathError; }
+            pathError = ValidatePath(destPath);
+            if (pathError != null) { return pathError; }
 
             try
             {
@@ -392,6 +442,10 @@ namespace NetFrameworkAISDK.Common
         {
             if (string.IsNullOrEmpty(sourcePath)) { return "Error: sourcePath is required."; }
             if (string.IsNullOrEmpty(destPath)) { return "Error: destPath is required."; }
+            string pathError = ValidatePath(sourcePath);
+            if (pathError != null) { return pathError; }
+            pathError = ValidatePath(destPath);
+            if (pathError != null) { return pathError; }
 
             try
             {

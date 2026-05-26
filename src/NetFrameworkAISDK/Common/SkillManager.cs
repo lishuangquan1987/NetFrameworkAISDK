@@ -346,7 +346,24 @@ namespace NetFrameworkAISDK.Common
 
             if (content.StartsWith("---"))
             {
-                int endIndex = content.IndexOf("---", 3);
+                // 查找结束标记，处理可能的缩进
+                int endIndex = -1;
+                for (int i = 3; i < content.Length - 2; i++)
+                {
+                    if (content[i] == '-' && content[i + 1] == '-' && content[i + 2] == '-')
+                    {
+                        // 确保 --- 在行首（忽略空白）
+                        int lineStart = content.LastIndexOf('\n', i);
+                        if (lineStart < 0) { lineStart = 0; }
+                        string beforeMarker = content.Substring(lineStart, i - lineStart).Trim();
+                        if (string.IsNullOrEmpty(beforeMarker) || beforeMarker == "\r")
+                        {
+                            endIndex = i;
+                            break;
+                        }
+                    }
+                }
+                
                 if (endIndex > 3)
                 {
                     var frontmatter = content.Substring(3, endIndex - 3);
@@ -354,11 +371,12 @@ namespace NetFrameworkAISDK.Common
                     foreach (var line in lines)
                     {
                         var trimmed = line.Trim();
-                        if (trimmed.StartsWith("name:"))
+                        // 大小写不敏感匹配键名
+                        if (trimmed.Length > 5 && trimmed.Substring(0, 5).ToLowerInvariant() == "name:")
                         {
                             name = trimmed.Substring(5).Trim().Trim('"', '\'', ' ');
                         }
-                        else if (trimmed.StartsWith("description:"))
+                        else if (trimmed.Length > 12 && trimmed.Substring(0, 12).ToLowerInvariant() == "description:")
                         {
                             description = trimmed.Substring(12).Trim().Trim('"', '\'', ' ');
                         }

@@ -30,12 +30,19 @@ namespace NetFrameworkAISDK.Common
         private DateTime _lastPromptBuildTime;
 
         private const int DefaultMaxIterations = 10;
+        private const int DefaultMaxHistoryMessages = 100;
 
         /// <summary>
         /// 工具调用循环的最大迭代次数。超过此次数后以最后一次内容作为最终回复。
         /// 默认值为 10，可在构造后修改。
         /// </summary>
         public int MaxIterations { get; set; }
+
+        /// <summary>
+        /// 对话历史最大消息数。超过此数量后自动裁剪最早的消息。
+        /// 默认值为 100，设为 0 或负数表示不限制。
+        /// </summary>
+        public int MaxHistoryMessages { get; set; }
 
         /// <summary>
         /// 工具审批回调。设置为 true 表示批准执行，false 表示拒绝执行。
@@ -107,8 +114,56 @@ namespace NetFrameworkAISDK.Common
             _conversationHistory = new List<ConversationMessage>();
 
             MaxIterations = DefaultMaxIterations;
+            MaxHistoryMessages = DefaultMaxHistoryMessages;
 
             _client.ConfigureTools(_functions);
+        }
+
+        /// <summary>
+        /// 裁剪对话历史，保留最近的 N 条消息
+        /// </summary>
+        /// <param name="keepLastN">保留的消息数量</param>
+        public void TrimHistory(int keepLastN)
+        {
+            if (keepLastN <= 0)
+            {
+                _conversationHistory.Clear();
+                return;
+            }
+            if (_conversationHistory.Count > keepLastN)
+            {
+                int removeCount = _conversationHistory.Count - keepLastN;
+                _conversationHistory.RemoveRange(0, removeCount);
+                _logger.Log(string.Format("Trimmed conversation history: removed {0} messages, keeping {1}", removeCount, keepLastN), "DEBUG");
+            }
+        }
+
+        /// <summary>
+        /// 获取当前对话历史消息数量
+        /// </summary>
+        public int HistoryCount
+        {
+            get { return _conversationHistory.Count; }
+        }
+
+        /// <summary>
+        /// 清空对话历史
+        /// </summary>
+        public void ClearHistory()
+        {
+            _conversationHistory.Clear();
+        }
+
+        /// <summary>
+        /// 添加消息到历史，并自动裁剪超出限制的部分
+        /// </summary>
+        private void AddToHistory(ConversationMessage message)
+        {
+            _conversationHistory.Add(message);
+            if (MaxHistoryMessages > 0 && _conversationHistory.Count > MaxHistoryMessages)
+            {
+                TrimHistory(MaxHistoryMessages);
+            }
         }
 
         /// <summary>
@@ -203,8 +258,22 @@ namespace NetFrameworkAISDK.Common
         /// <returns>包含反序列化对象或错误信息的响应</returns>
         public ApiResponse<T> RunStructured<T>(string userMessage, Action<ToolCallEventArgs> onToolCall = null)
         {
-            var schemaName = typeof(T).Name;
-            var jsonSchema = JsonSchemaGenerator.GenerateFromType(typeof(T), schemaName);
+            // 验证类型约束：T 必须有公共无参构造函数或者是值类型
+            var type = typeof(T);
+            if (type.IsClass && !type.IsAbstract)
+            {
+                var constructor = type.GetConstructor(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance, null, System.Type.EmptyTypes, null);
+                if (constructor == null)
+                {
+                    return new ApiResponse<T>
+                    {
+                        Error = new ApiError { Message = "Type " + type.Name + " must have a public parameterless constructor for structured output." }
+                    };
+                }
+            }
+
+            var schemaName = type.Name;
+            var jsonSchema = JsonSchemaGenerator.GenerateFromType(type, schemaName);
 
             _options.ResponseFormat = new ResponseFormat
             {
@@ -307,7 +376,7 @@ namespace NetFrameworkAISDK.Common
                 assistantMsg.ToolCalls = new List<ToolCallRequest>(result.ToolCalls);
             }
 
-            _conversationHistory.Add(assistantMsg);
+            AddToHistory(assistantMsg);
 
             if (!hasToolCalls)
             {
@@ -432,7 +501,7 @@ namespace NetFrameworkAISDK.Common
                 assistantMsg.ToolCalls = collectedToolCalls;
             }
 
-            _conversationHistory.Add(assistantMsg);
+            AddToHistory(assistantMsg);
 
             if (!hasToolCalls)
             {
@@ -470,7 +539,7 @@ namespace NetFrameworkAISDK.Common
 
                         if (!ToolApproval(approvalArgs))
                         {
-                            _conversationHistory.Add(new ConversationMessage
+                            AddToHistory(new ConversationMessage
                             {
                                 Role = MessageRole.Tool,
                                 Name = functionName,
@@ -489,7 +558,7 @@ namespace NetFrameworkAISDK.Common
                     }
 
                     var result = function.Execute(functionArgs);
-                    _conversationHistory.Add(new ConversationMessage
+                    AddToHistory(new ConversationMessage
                     {
                         Role = MessageRole.Tool,
                         Name = functionName,
@@ -550,7 +619,7 @@ namespace NetFrameworkAISDK.Common
 
                         if (!ToolApproval(approvalArgs))
                         {
-                            _conversationHistory.Add(new ConversationMessage
+                            AddToHistory(new ConversationMessage
                             {
                                 Role = MessageRole.Tool,
                                 Name = functionName,
@@ -569,7 +638,7 @@ namespace NetFrameworkAISDK.Common
                     }
 
                     var result = function.Execute(functionArgs);
-                    _conversationHistory.Add(new ConversationMessage
+                    AddToHistory(new ConversationMessage
                     {
                         Role = MessageRole.Tool,
                         Name = functionName,
@@ -678,7 +747,7 @@ namespace NetFrameworkAISDK.Common
         /// <param name="contentParts">多模态内容块列表（可为 null）</param>
         private void AddUserMessage(string userMessage, List<MessageContent> contentParts)
         {
-            _conversationHistory.Add(new ConversationMessage
+            AddToHistory(new ConversationMessage
             {
                 Role = MessageRole.User,
                 Content = userMessage,
