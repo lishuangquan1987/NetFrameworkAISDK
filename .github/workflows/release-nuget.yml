@@ -18,20 +18,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.x"
+
+      - name: Setup MSBuild (for .NET Framework projects)
         uses: microsoft/setup-msbuild@v2
 
       - name: Setup NuGet
         uses: NuGet/setup-nuget@v2
-
-      - name: Install .NET Framework 4.0 Reference Assemblies
-        shell: pwsh
-        run: |
-          Write-Host "Downloading .NET Framework 4.0 reference assemblies..."
-          nuget install Microsoft.NETFramework.ReferenceAssemblies.net40 -Version 1.0.3 -OutputDirectory packages
-          $refDir = (Resolve-Path "packages\Microsoft.NETFramework.ReferenceAssemblies.net40.1.0.3\build\.NETFramework\v4.0\").Path
-          Write-Host "Reference assemblies path: $refDir"
-          echo "FRAMEWORK_PATH_OVERRIDE=$refDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
 
       - name: Extract version
         id: get_version
@@ -48,13 +44,28 @@ jobs:
             $version = "${{ github.event.inputs.version }}"
           }
           echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
-          echo "Extracted version: $version"
+          Write-Host "Extracted version: $version"
 
-      - name: Restore NuGet packages
+      - name: Restore SDK project
+        run: dotnet restore src/NetFrameworkAISDK/NetFrameworkAISDK.csproj
+
+      - name: Build SDK project (net40 + netstandard2.0)
+        run: dotnet build src/NetFrameworkAISDK/NetFrameworkAISDK.csproj -c Release --no-restore
+
+      - name: Install .NET Framework 4.0 Reference Assemblies (for Samples/Tests)
+        shell: pwsh
+        run: |
+          Write-Host "Downloading .NET Framework 4.0 reference assemblies..."
+          nuget install Microsoft.NETFramework.ReferenceAssemblies.net40 -Version 1.0.3 -OutputDirectory packages
+          $refDir = (Resolve-Path "packages\Microsoft.NETFramework.ReferenceAssemblies.net40.1.0.3\build\.NETFramework\v4.0\").Path
+          Write-Host "Reference assemblies path: $refDir"
+          echo "FRAMEWORK_PATH_OVERRIDE=$refDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+
+      - name: Restore Samples & Tests
         run: nuget restore NetFrameworkAISDK.sln
 
-      - name: Build solution (Release)
-        run: msbuild NetFrameworkAISDK.sln /t:Rebuild /p:Configuration=Release /p:FrameworkPathOverride="$env:FRAMEWORK_PATH_OVERRIDE"
+      - name: Build Samples & Tests
+        run: msbuild NetFrameworkAISDK.sln /t:Build /p:Configuration=Release /p:FrameworkPathOverride="$env:FRAMEWORK_PATH_OVERRIDE" /p:BuildProjectReferences=false
 
       - name: Create NuGet package
         run: |

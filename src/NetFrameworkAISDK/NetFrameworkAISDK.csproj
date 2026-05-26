@@ -8,6 +8,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <LangVersion>5</LangVersion>
     <FileAlignment>512</FileAlignment>
+    <!-- net40 输出到平级目录，兼容旧式 Samples/Tests 的 ProjectReference -->
+    <OutputPath Condition="'$(TargetFramework)' == 'net40'">bin\$(Configuration)\</OutputPath>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
@@ -21,7 +23,6 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <DefineConstants>TRACE</DefineConstants>
-    <DocumentationFile>bin\Release\$(TargetFramework)\NetFrameworkAISDK.xml</DocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
