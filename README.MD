@@ -237,14 +237,13 @@ var agent = AIAgent.CreateWithDefaults(
 Or manually:
 
 ```csharp
-var skills = SkillManager.DiscoverSkills("./skills");
-var prompt = SkillManager.BuildProgressivePrompt(skills);
+var skillManager = new SkillManager("./skills");
+var prompt = skillManager.BuildProgressivePrompt();
 
 var agent = new AIAgent(client, "gpt-4o", prompt, new[]
 {
-    SkillManager.CreateLoadSkillFunction(skills),
-    SkillManager.CreateReadSkillTool(skills),
-    SkillManager.CreateBuiltInTools()
+    skillManager.CreateLoadSkillFunction(),
+    skillManager.CreateReadSkillTool()
 });
 ```
 

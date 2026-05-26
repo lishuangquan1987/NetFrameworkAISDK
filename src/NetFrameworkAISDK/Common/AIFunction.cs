@@ -9,6 +9,8 @@ namespace NetFrameworkAISDK.Common
     /// </summary>
     public class AIFunction
     {
+        private Dictionary<string, object> _parametersDictionary;
+
         /// <summary>
         /// 函数名称（模型调用时使用）
         /// </summary>
@@ -22,7 +24,31 @@ namespace NetFrameworkAISDK.Common
         /// <summary>
         /// 函数参数定义（JSON Schema 格式，object 类型以兼容 MCP 工具）
         /// </summary>
-        public object Parameters { get; set; }
+        public object Parameters
+        {
+            get { return _parametersDictionary; }
+            set
+            {
+                if (value is Dictionary<string, object> dict)
+                {
+                    _parametersDictionary = dict;
+                }
+                else
+                {
+                    // 保持向后兼容
+                    _parametersDictionary = value as Dictionary<string, object>;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 函数参数定义（强类型，JSON Schema 格式）
+        /// </summary>
+        public Dictionary<string, object> ParametersSchema
+        {
+            get { return _parametersDictionary; }
+            set { _parametersDictionary = value; }
+        }
 
         /// <summary>
         /// 执行回调，接收参数 JSON 字符串，返回结果字符串
@@ -45,6 +71,7 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         public AIFunction()
         {
+            _parametersDictionary = new Dictionary<string, object>();
         }
 
         /// <summary>
@@ -64,13 +91,12 @@ namespace NetFrameworkAISDK.Common
                 { "required", new List<string>() }
             };
 
-            return new AIFunction
-            {
-                Name = !string.IsNullOrEmpty(name) ? name : method.Name,
-                Description = description,
-                Parameters = parameters,
-                Execute = new Func<string, string>(argsJson => func())
-            };
+            var result = new AIFunction();
+            result.Name = !string.IsNullOrEmpty(name) ? name : method.Name;
+            result.Description = description;
+            result.ParametersSchema = parameters;
+            result.Execute = new Func<string, string>(argsJson => func());
+            return result;
         }
 
         /// <summary>
@@ -83,13 +109,12 @@ namespace NetFrameworkAISDK.Common
         /// <returns>AI 函数实例</returns>
         public static AIFunction CreateFromMcpTool(string name, string description, object inputSchema, Func<string, string> execute)
         {
-            return new AIFunction
-            {
-                Name = name,
-                Description = description,
-                Parameters = inputSchema,
-                Execute = execute
-            };
+            var result = new AIFunction();
+            result.Name = name;
+            result.Description = description;
+            result.Parameters = inputSchema;
+            result.Execute = execute;
+            return result;
         }
 
         /// <summary>

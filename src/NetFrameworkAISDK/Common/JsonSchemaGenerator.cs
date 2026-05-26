@@ -143,7 +143,24 @@ namespace NetFrameworkAISDK.Common
                 var propSchema = BuildSchema(prop.PropertyType);
                 if (propSchema != null)
                 {
-                    var name = _naming.GetPropertyName(prop.Name, false);
+                    // 优先使用 [JsonProperty] 特性中指定的名称
+                    string name = null;
+                    var jsonPropertyAttr = prop.GetCustomAttributes(typeof(Newtonsoft.Json.JsonPropertyAttribute), false);
+                    if (jsonPropertyAttr.Length > 0)
+                    {
+                        var attr = (Newtonsoft.Json.JsonPropertyAttribute)jsonPropertyAttr[0];
+                        if (!string.IsNullOrEmpty(attr.PropertyName))
+                        {
+                            name = attr.PropertyName;
+                        }
+                    }
+                    
+                    // 如果没有 [JsonProperty] 特性，使用 snake_case 转换
+                    if (name == null)
+                    {
+                        name = _naming.GetPropertyName(prop.Name, false);
+                    }
+                    
                     properties[name] = propSchema;
                     // 仅当类型是非可空值类型时才标记为 required
                     // 引用类型和 Nullable<T> 都不标记为 required
