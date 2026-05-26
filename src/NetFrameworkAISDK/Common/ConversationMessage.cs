@@ -36,5 +36,10 @@ namespace NetFrameworkAISDK.Common
         /// 多模态内容块列表（用于图像等非文本内容）
         /// </summary>
         public List<MessageContent> ContentParts { get; set; }
+
+        /// <summary>
+        /// 推理内容（DeepSeek 思考模式专用，在后续对话中必须原样传回）
+        /// </summary>
+        public string ReasoningContent { get; set; }
     }
 }

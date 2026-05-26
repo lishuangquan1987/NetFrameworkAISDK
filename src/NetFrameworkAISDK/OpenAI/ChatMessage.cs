@@ -36,5 +36,10 @@ namespace NetFrameworkAISDK.OpenAI
         /// 工具调用列表（仅 assistant 角色）
         /// </summary>
         public List<ToolCall> ToolCalls { get; set; }
+
+        /// <summary>
+        /// 推理内容（DeepSeek 思考模式专用，下次请求必须原样传回）
+        /// </summary>
+        public string ReasoningContent { get; set; }
     }
 }

@@ -186,8 +186,9 @@ namespace NetFrameworkAISDK.OpenAI
                         {
                             bool hasContent = !string.IsNullOrEmpty(delta.Content);
                             bool hasToolCalls = delta.ToolCalls != null && delta.ToolCalls.Count > 0;
+                            bool hasReasoning = !string.IsNullOrEmpty(delta.ReasoningContent);
 
-                            if (!hasContent && !hasToolCalls)
+                            if (!hasContent && !hasToolCalls && !hasReasoning)
                             {
                                 return;
                             }
@@ -196,6 +197,7 @@ namespace NetFrameworkAISDK.OpenAI
                             {
                                 Model = streamResponse.Model,
                                 Content = delta.Content,
+                                ReasoningContent = delta.ReasoningContent,
                                 FinishReason = streamResponse.Choices[0].FinishReason
                             };
 
@@ -324,6 +326,12 @@ namespace NetFrameworkAISDK.OpenAI
                     }
                 }
 
+                // DeepSeek 思考模式：reasoning_content 必须原样传回
+                if (!string.IsNullOrEmpty(msg.ReasoningContent))
+                {
+                    chatMsg.ReasoningContent = msg.ReasoningContent;
+                }
+
                 result.Add(chatMsg);
             }
 
@@ -348,6 +356,7 @@ namespace NetFrameworkAISDK.OpenAI
                 if (choice.Message != null)
                 {
                     result.Content = choice.Message.Content;
+                    result.ReasoningContent = choice.Message.ReasoningContent;
 
                     if (choice.Message.ToolCalls != null && choice.Message.ToolCalls.Count > 0)
                     {

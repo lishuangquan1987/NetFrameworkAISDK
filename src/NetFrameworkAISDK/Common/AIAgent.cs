@@ -366,7 +366,8 @@ namespace NetFrameworkAISDK.Common
             var assistantMsg = new ConversationMessage
             {
                 Role = MessageRole.Assistant,
-                Content = result.Content != null ? result.Content : ""
+                Content = result.Content != null ? result.Content : "",
+                ReasoningContent = result.ReasoningContent
             };
 
             bool hasToolCalls = result.ToolCalls != null && result.ToolCalls.Count > 0;
@@ -463,6 +464,7 @@ namespace NetFrameworkAISDK.Common
             }
 
             string fullResponse = "";
+            string fullReasoning = "";
             var collectedToolCalls = new List<ToolCallRequest>();
             bool hasError = false;
 
@@ -472,6 +474,11 @@ namespace NetFrameworkAISDK.Common
                 _options,
                 new Action<ConversationResponse>(chunk =>
                 {
+                    if (!string.IsNullOrEmpty(chunk.ReasoningContent))
+                    {
+                        fullReasoning += chunk.ReasoningContent;
+                    }
+
                     if (!string.IsNullOrEmpty(chunk.Content))
                     {
                         fullResponse += chunk.Content;
@@ -503,7 +510,8 @@ namespace NetFrameworkAISDK.Common
             var assistantMsg = new ConversationMessage
             {
                 Role = MessageRole.Assistant,
-                Content = fullResponse
+                Content = fullResponse,
+                ReasoningContent = fullReasoning
             };
 
             if (hasToolCalls)

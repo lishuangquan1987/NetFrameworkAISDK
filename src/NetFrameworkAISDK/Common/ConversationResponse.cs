@@ -26,5 +26,10 @@ namespace NetFrameworkAISDK.Common
         /// 模型停止原因（如 "stop", "tool_calls", "end_turn", "max_tokens"）
         /// </summary>
         public string FinishReason { get; set; }
+
+        /// <summary>
+        /// 推理内容（DeepSeek 思考模式专用）
+        /// </summary>
+        public string ReasoningContent { get; set; }
     }
 }
