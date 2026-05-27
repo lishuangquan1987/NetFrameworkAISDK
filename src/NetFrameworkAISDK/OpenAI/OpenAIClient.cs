@@ -248,7 +248,7 @@ namespace NetFrameworkAISDK.OpenAI
                 var chatMsg = new ChatMessage
                 {
                     Role = msg.Role,
-                    Name = msg.Name ?? "",
+                    Name = msg.Name,
                     ToolCallId = msg.ToolCallId
                 };
 
@@ -323,6 +323,12 @@ namespace NetFrameworkAISDK.OpenAI
                                 Arguments = tc.FunctionArguments
                             }
                         });
+                    }
+
+                    // DeepSeek 要求 assistant+tool_calls 消息必须有非空 name 字段
+                    if (string.IsNullOrEmpty(chatMsg.Name))
+                    {
+                        chatMsg.Name = "assistant";
                     }
                 }
 

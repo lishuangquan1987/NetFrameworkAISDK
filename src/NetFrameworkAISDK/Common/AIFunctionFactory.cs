@@ -142,7 +142,16 @@ namespace NetFrameworkAISDK.Common
         {
             try
             {
+                if (argsJson == null)
+                {
+                    return "Error: argsJson is null";
+                }
+
                 var argsDict = JsonHelper.Deserialize<Dictionary<string, object>>(argsJson);
+                if (argsDict == null)
+                {
+                    return "Error: Failed to deserialize args: " + (argsJson.Length > 200 ? argsJson.Substring(0, 200) + "..." : argsJson);
+                }
                 var parameters = method.GetParameters();
                 var args = new object[parameters.Length];
 
@@ -178,6 +187,22 @@ namespace NetFrameworkAISDK.Common
                     else
                     {
                         throw new ArgumentException(string.Format("Missing required parameter: {0}", param.Name));
+                    }
+                }
+
+                // 参数完整性检查：避免 null 传入方法导致 NRE
+                for (int i = 0; i < args.Length; i++)
+                {
+                    if (args[i] == null)
+                    {
+                        if (parameters[i].IsOptional)
+                        {
+                            args[i] = parameters[i].DefaultValue;
+                        }
+                        else
+                        {
+                            throw new ArgumentException(string.Format("Parameter '{0}' is null and not optional", parameters[i].Name));
+                        }
                     }
                 }
 

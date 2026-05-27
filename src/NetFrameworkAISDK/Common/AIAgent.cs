@@ -375,6 +375,11 @@ namespace NetFrameworkAISDK.Common
             if (hasToolCalls)
             {
                 assistantMsg.ToolCalls = new List<ToolCallRequest>(result.ToolCalls);
+                // DeepSeek 思考模式要求 assistant 带 tool_calls 时有非空 name 字段
+                if (string.IsNullOrEmpty(assistantMsg.Name))
+                {
+                    assistantMsg.Name = "assistant";
+                }
             }
 
             AddToHistory(assistantMsg);
@@ -517,6 +522,11 @@ namespace NetFrameworkAISDK.Common
             if (hasToolCalls)
             {
                 assistantMsg.ToolCalls = collectedToolCalls;
+                // DeepSeek 思考模式要求 assistant 带 tool_calls 时有非空 name 字段
+                if (string.IsNullOrEmpty(assistantMsg.Name))
+                {
+                    assistantMsg.Name = "assistant";
+                }
             }
 
             AddToHistory(assistantMsg);
@@ -529,7 +539,7 @@ namespace NetFrameworkAISDK.Common
             foreach (var toolCall in collectedToolCalls)
             {
                 string functionName = toolCall.FunctionName;
-                string functionArgs = toolCall.FunctionArguments != null ? toolCall.FunctionArguments : "{}";
+                string functionArgs = !string.IsNullOrEmpty(toolCall.FunctionArguments) ? toolCall.FunctionArguments : "{}";
 
                 AIFunction function = null;
                 if (!string.IsNullOrEmpty(functionName) && _functionMap.ContainsKey(functionName))
@@ -597,13 +607,13 @@ namespace NetFrameworkAISDK.Common
                 }
                 else
                 {
-                    // 工具未注册：添加错误结果，确保对话历史完整
+                    // 工具未注册或无函数名：添加错误结果，确保对话历史完整
                     AddToHistory(new ConversationMessage
                     {
                         Role = MessageRole.Tool,
-                        Name = functionName,
+                        Name = !string.IsNullOrEmpty(functionName) ? functionName : "unknown",
                         ToolCallId = toolCall.Id,
-                        Content = "Error: Tool '" + functionName + "' not found."
+                        Content = "Error: Tool '" + (functionName ?? "(null)") + "' not found."
                     });
                 }
             }
@@ -620,7 +630,7 @@ namespace NetFrameworkAISDK.Common
             foreach (var toolCall in toolCalls)
             {
                 string functionName = toolCall.FunctionName;
-                string functionArgs = toolCall.FunctionArguments != null ? toolCall.FunctionArguments : "{}";
+                string functionArgs = !string.IsNullOrEmpty(toolCall.FunctionArguments) ? toolCall.FunctionArguments : "{}";
 
                 AIFunction function = null;
                 if (!string.IsNullOrEmpty(functionName) && _functionMap.ContainsKey(functionName))
@@ -688,12 +698,13 @@ namespace NetFrameworkAISDK.Common
                 }
                 else
                 {
+                    // 工具未注册或无函数名：添加错误结果
                     AddToHistory(new ConversationMessage
                     {
                         Role = MessageRole.Tool,
-                        Name = functionName,
+                        Name = !string.IsNullOrEmpty(functionName) ? functionName : "unknown",
                         ToolCallId = toolCall.Id,
-                        Content = "Error: Tool '" + functionName + "' not found."
+                        Content = "Error: Tool '" + (functionName ?? "(null)") + "' not found."
                     });
                 }
             }
@@ -704,6 +715,12 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         private static void MergeToolCall(List<ToolCallRequest> collected, ToolCallRequest delta)
         {
+            // 忽略无 Id 的工具调用块（流式结束标记或空块）
+            if (string.IsNullOrEmpty(delta.Id))
+            {
+                return;
+            }
+
             foreach (var existing in collected)
             {
                 if (existing.Id == delta.Id)
