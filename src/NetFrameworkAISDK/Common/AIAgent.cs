@@ -28,6 +28,7 @@ namespace NetFrameworkAISDK.Common
         // SystemPrompt 缓存，避免 AgentLoop 每次迭代重复 I/O
         private string _cachedSystemPrompt;
         private DateTime _lastPromptBuildTime;
+        private string _structuredSchemaHint;
 
         private const int DefaultMaxIterations = 10;
         private const int DefaultMaxHistoryMessages = 100;
@@ -285,6 +286,25 @@ namespace NetFrameworkAISDK.Common
 
             var response = Run(userMessage, onToolCall);
 
+            // 如果 json_schema 不被支持（如 DeepSeek），回退到 json_object
+            if (!response.IsSuccess && response.Error != null
+                && response.Error.Message.IndexOf("response_format", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                _logger.Log("json_schema not supported, falling back to json_object", "DEBUG");
+
+                _options.ResponseFormat = new ResponseFormat
+                {
+                    Type = "json_object"
+                };
+
+                // 把 JSON Schema 描述注入 system prompt
+                _structuredSchemaHint = "You MUST output a valid JSON object matching this structure.\n"
+                    + "DO NOT include explanations, only output the JSON.\n"
+                    + "Required JSON schema:\n" + jsonSchema;
+
+                response = Run(userMessage, onToolCall);
+            }
+
             _options.ResponseFormat = null;
 
             if (!response.IsSuccess)
@@ -329,6 +349,14 @@ namespace NetFrameworkAISDK.Common
             {
                 _cachedSystemPrompt = _baseInstructions;
             }
+
+            // 注入结构化输出的 Schema 提示（json_object 回退模式）
+            if (!string.IsNullOrEmpty(_structuredSchemaHint))
+            {
+                _cachedSystemPrompt = _cachedSystemPrompt + "\n\n" + _structuredSchemaHint;
+                _structuredSchemaHint = null;
+            }
+
             _lastPromptBuildTime = DateTime.UtcNow;
             return _cachedSystemPrompt;
         }

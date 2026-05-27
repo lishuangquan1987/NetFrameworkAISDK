@@ -122,17 +122,23 @@ namespace NetFrameworkAISDK.OpenAI
 
             if (options.ResponseFormat != null)
             {
-                var schemaObj = JsonHelper.Deserialize<object>(options.ResponseFormat.JsonSchema);
-                request.ResponseFormat = new OpenAiResponseFormat
+                var responseFormat = new OpenAiResponseFormat
                 {
-                    Type = options.ResponseFormat.Type,
-                    JsonSchema = new JsonSchemaObject
+                    Type = options.ResponseFormat.Type
+                };
+
+                if (!string.IsNullOrEmpty(options.ResponseFormat.JsonSchema))
+                {
+                    var schemaObj = JsonHelper.Deserialize<object>(options.ResponseFormat.JsonSchema);
+                    responseFormat.JsonSchema = new JsonSchemaObject
                     {
                         Name = options.ResponseFormat.SchemaName,
                         Strict = options.ResponseFormat.Strict,
                         Schema = schemaObj
-                    }
-                };
+                    };
+                }
+
+                request.ResponseFormat = responseFormat;
             }
 
             var response = Post<ChatCompletionResponse>("chat/completions", request);
@@ -161,17 +167,21 @@ namespace NetFrameworkAISDK.OpenAI
             OpenAiResponseFormat responseFormat = null;
             if (options.ResponseFormat != null)
             {
-                var schemaObj = JsonHelper.Deserialize<object>(options.ResponseFormat.JsonSchema);
                 responseFormat = new OpenAiResponseFormat
                 {
-                    Type = options.ResponseFormat.Type,
-                    JsonSchema = new JsonSchemaObject
+                    Type = options.ResponseFormat.Type
+                };
+
+                if (!string.IsNullOrEmpty(options.ResponseFormat.JsonSchema))
+                {
+                    var schemaObj = JsonHelper.Deserialize<object>(options.ResponseFormat.JsonSchema);
+                    responseFormat.JsonSchema = new JsonSchemaObject
                     {
                         Name = options.ResponseFormat.SchemaName,
                         Strict = options.ResponseFormat.Strict,
                         Schema = schemaObj
-                    }
-                };
+                    };
+                }
             }
 
             CreateChatCompletionStream(
