@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -31,20 +30,25 @@ namespace NetFrameworkAISDK.Common
         /// <summary>请求超时毫秒数</summary>
         protected readonly int TimeoutMilliseconds;
 
+        /// <summary>日志记录器（实例级别，可通过构造函数注入）</summary>
+        protected readonly ILogger _logger;
+
         private readonly int MaxRetries;
         private readonly int RetryDelayMilliseconds;
-        private static readonly ILogger _logger = new ConsoleLogger();
+
+        /// <summary>默认日志记录器（静态初始化及回退使用）</summary>
+        private static readonly ILogger _defaultLogger = new ConsoleLogger();
 
         static HttpClientBase()
         {
             try
             {
                 ServicePointManager.SecurityProtocol = Tls12 | Tls11 | Tls10;
-                _logger.Log("HttpClientBase: Configured SecurityProtocol to TLS 1.2, 1.1, and 1.0", "DEBUG");
+                _defaultLogger.Log("HttpClientBase: Configured SecurityProtocol to TLS 1.2, 1.1, and 1.0", "DEBUG");
             }
             catch (Exception ex)
             {
-                _logger.Log("HttpClientBase: Failed to configure SecurityProtocol: " + ex.Message, "ERROR");
+                _defaultLogger.Log("HttpClientBase: Failed to configure SecurityProtocol: " + ex.Message, "ERROR");
             }
         }
 
@@ -54,7 +58,18 @@ namespace NetFrameworkAISDK.Common
         /// <param name="apiKey">API 密钥</param>
         /// <param name="baseUrl">API 基础 URL</param>
         protected HttpClientBase(string apiKey, string baseUrl)
-            : this(apiKey, baseUrl, 30000, 2, 1000)
+            : this(apiKey, baseUrl, 30000, 2, 1000, null)
+        {
+        }
+
+        /// <summary>
+        /// 创建 HTTP 客户端（默认 30 秒超时，带日志）
+        /// </summary>
+        /// <param name="apiKey">API 密钥</param>
+        /// <param name="baseUrl">API 基础 URL</param>
+        /// <param name="logger">日志记录器（可选，默认 ConsoleLogger）</param>
+        protected HttpClientBase(string apiKey, string baseUrl, ILogger logger)
+            : this(apiKey, baseUrl, 30000, 2, 1000, logger)
         {
         }
 
@@ -65,7 +80,7 @@ namespace NetFrameworkAISDK.Common
         /// <param name="baseUrl">API 基础 URL</param>
         /// <param name="timeoutMilliseconds">请求超时毫秒数</param>
         protected HttpClientBase(string apiKey, string baseUrl, int timeoutMilliseconds)
-            : this(apiKey, baseUrl, timeoutMilliseconds, 2, 1000)
+            : this(apiKey, baseUrl, timeoutMilliseconds, 2, 1000, null)
         {
         }
 
@@ -78,6 +93,20 @@ namespace NetFrameworkAISDK.Common
         /// <param name="maxRetries">最大重试次数</param>
         /// <param name="retryDelayMilliseconds">重试延迟基数（毫秒）</param>
         protected HttpClientBase(string apiKey, string baseUrl, int timeoutMilliseconds, int maxRetries, int retryDelayMilliseconds)
+            : this(apiKey, baseUrl, timeoutMilliseconds, maxRetries, retryDelayMilliseconds, null)
+        {
+        }
+
+        /// <summary>
+        /// 创建 HTTP 客户端（完全自定义 + 日志）
+        /// </summary>
+        /// <param name="apiKey">API 密钥</param>
+        /// <param name="baseUrl">API 基础 URL</param>
+        /// <param name="timeoutMilliseconds">请求超时毫秒数</param>
+        /// <param name="maxRetries">最大重试次数</param>
+        /// <param name="retryDelayMilliseconds">重试延迟基数（毫秒）</param>
+        /// <param name="logger">日志记录器（可选，默认 ConsoleLogger）</param>
+        protected HttpClientBase(string apiKey, string baseUrl, int timeoutMilliseconds, int maxRetries, int retryDelayMilliseconds, ILogger logger)
         {
             if (string.IsNullOrEmpty(apiKey))
             {
@@ -88,6 +117,7 @@ namespace NetFrameworkAISDK.Common
             TimeoutMilliseconds = timeoutMilliseconds;
             MaxRetries = maxRetries;
             RetryDelayMilliseconds = retryDelayMilliseconds;
+            _logger = logger ?? _defaultLogger;
         }
 
         /// <summary>

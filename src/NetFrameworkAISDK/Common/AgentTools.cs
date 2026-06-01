@@ -687,8 +687,8 @@ namespace NetFrameworkAISDK.Common
                 return "Error: Command exceeds maximum length.";
             }
 
-            // 仅阻止真正危险的命令注入字符：& | ;
-            char[] unsafeChars = new char[] { '&', '|', ';' };
+            // 阻止命令注入字符：& | ; \0
+            char[] unsafeChars = new char[] { '&', '|', ';', '\0' };
             foreach (char c in unsafeChars)
             {
                 if (command.IndexOf(c) >= 0)

@@ -174,6 +174,10 @@ namespace NetFrameworkAISDK.Common
                         {
                             args[i] = Convert.ChangeType(value, targetType);
                         }
+                        else if (targetType.IsAssignableFrom(value.GetType()))
+                        {
+                            args[i] = value;
+                        }
                         else
                         {
                             var json = JsonHelper.Serialize(value);

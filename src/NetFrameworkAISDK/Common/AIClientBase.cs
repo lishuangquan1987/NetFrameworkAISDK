@@ -31,6 +31,19 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
+        /// 创建 AI 客户端基类实例（带日志）
+        /// </summary>
+        /// <param name="apiKey">API 密钥</param>
+        /// <param name="baseUrl">API 基础 URL</param>
+        /// <param name="logger">日志记录器</param>
+        protected AIClientBase(string apiKey, string baseUrl, ILogger logger)
+            : base(apiKey, baseUrl, logger)
+        {
+            _tools = new List<AIFunction>();
+            _toolMap = new Dictionary<string, AIFunction>();
+        }
+
+        /// <summary>
         /// 创建 AI 客户端基类实例（指定超时）
         /// </summary>
         /// <param name="apiKey">API 密钥</param>

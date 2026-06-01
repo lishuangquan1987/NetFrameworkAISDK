@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using System.Collections.Generic;
 
 namespace NetFrameworkAISDK.OpenAI
@@ -18,8 +19,10 @@ namespace NetFrameworkAISDK.OpenAI
         public string Content { get; set; }
 
         /// <summary>
-        /// 多模态内容块列表（用于图像等复杂内容）
+        /// 多模态内容块列表（用于图像等复杂内容）。
+        /// 序列化为 "content" 以匹配 OpenAI API 多模态格式。
         /// </summary>
+        [JsonProperty("content")]
         public List<ImageContentPart> ContentParts { get; set; }
 
         /// <summary>

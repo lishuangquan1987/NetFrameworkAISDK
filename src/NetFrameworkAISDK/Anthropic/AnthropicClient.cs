@@ -1,7 +1,6 @@
 using NetFrameworkAISDK.Common;
 using System;
 using System.Collections.Generic;
-using System.Net;
 
 namespace NetFrameworkAISDK.Anthropic
 {
@@ -19,7 +18,7 @@ namespace NetFrameworkAISDK.Anthropic
         /// </summary>
         /// <param name="apiKey">Anthropic API 密钥</param>
         public AnthropicClient(string apiKey)
-            : this(apiKey, DefaultBaseUrl)
+            : this(apiKey, DefaultBaseUrl, null)
         {
         }
 
@@ -29,7 +28,18 @@ namespace NetFrameworkAISDK.Anthropic
         /// <param name="apiKey">Anthropic API 密钥</param>
         /// <param name="baseUrl">自定义 API 基础 URL</param>
         public AnthropicClient(string apiKey, string baseUrl)
-            : base(apiKey, baseUrl)
+            : this(apiKey, baseUrl, null)
+        {
+        }
+
+        /// <summary>
+        /// 创建 Anthropic 客户端（带日志）
+        /// </summary>
+        /// <param name="apiKey">Anthropic API 密钥</param>
+        /// <param name="baseUrl">自定义 API 基础 URL</param>
+        /// <param name="logger">日志记录器（可选）</param>
+        public AnthropicClient(string apiKey, string baseUrl, ILogger logger)
+            : base(apiKey, baseUrl, logger)
         {
         }
 
@@ -345,8 +355,9 @@ namespace NetFrameworkAISDK.Anthropic
                             {
                                 input = JsonHelper.Deserialize<object>(tc.FunctionArguments);
                             }
-                            catch
+                            catch (Exception ex)
                             {
+                                _logger.Log("AnthropicClient: Failed to parse tool call arguments for " + tc.FunctionName + ": " + ex.Message, "WARN");
                                 input = new Dictionary<string, object>();
                             }
                         }
