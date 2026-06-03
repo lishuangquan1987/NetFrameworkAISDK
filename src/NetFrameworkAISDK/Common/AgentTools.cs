@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -676,7 +676,111 @@ namespace NetFrameworkAISDK.Common
         }
 
         [Description("Execute a shell command and return the output")]
+        [Description("Execute a shell command and return the output")]
         private static string RunCommand(
+            [Description("Command to execute")] string command,
+            [Description("Working directory (optional)")] string workingDir = null)
+        {
+            if (string.IsNullOrEmpty(command)) { return "Error: command is required."; }
+
+            if (command.Length > 2000)
+            {
+                return "Error: Command exceeds maximum length.";
+            }
+
+            // Enhanced command injection protection using whitelist approach
+            string[] allowedCommands = new string[] 
+            {
+                "dir", "ls", "echo", "type", "cat", "pwd", "date", "time",
+                "whoami", "hostname", "ipconfig", "ping", "tracert", "nslookup",
+                "netstat", "tasklist", "systeminfo", "where", "find", "findstr",
+                "dotnet", "msbuild", "git", "node", "npm", "python",
+                "Get-ChildItem", "Get-Content", "Select-String", "Write-Output"
+            };
+
+            string cmdName = command.TrimStart().Split(' ')[0].ToLowerInvariant();
+            bool isAllowed = false;
+            foreach (string allowed in allowedCommands)
+            {
+                if (string.Equals(cmdName, allowed, StringComparison.OrdinalIgnoreCase))
+                {
+                    isAllowed = true;
+                    break;
+                }
+            }
+            if (!isAllowed)
+            {
+                return "Error: Command '" + cmdName + "' is not in the allowed list.";
+            }
+
+            char[] unsafeChars = new char[] { '&', '|', ';', '`', '>', '<', '\r', '\n' };
+            foreach (char c in unsafeChars)
+            {
+                if (command.IndexOf(c) >= 0)
+                {
+                    return "Error: Command contains unsafe character.";
+                }
+            }
+
+            if (!string.IsNullOrEmpty(workingDir))
+            {
+                try
+                {
+                    workingDir = System.IO.Path.GetFullPath(workingDir);
+                    if (!System.IO.Directory.Exists(workingDir))
+                    {
+                        return "Error: Working directory does not exist: " + workingDir;
+                    }
+                    string resolvedPath = System.IO.Path.GetFullPath(workingDir);
+                    if (resolvedPath.IndexOf("..", StringComparison.Ordinal) >= 0)
+                    {
+                        return "Error: Working directory path contains traversal characters.";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Log("Invalid working directory path: " + ex.Message, "ERROR");
+                    return "Error: Invalid working directory path.";
+                }
+            }
+
+            try
+            {
+                _logger.Log(string.Format("Executing command: {0}", command), "INFO");
+
+                using (var process = new System.Diagnostics.Process())
+                {
+                    process.StartInfo.FileName = "cmd.exe";
+                    process.StartInfo.Arguments = "/c " + command;
+                    if (!string.IsNullOrEmpty(workingDir))
+                    {
+                        process.StartInfo.WorkingDirectory = workingDir;
+                    }
+                    process.StartInfo.RedirectStandardOutput = true;
+                    process.StartInfo.RedirectStandardError = true;
+                    process.StartInfo.UseShellExecute = false;
+                    process.StartInfo.CreateNoWindow = true;
+
+                    process.Start();
+                    string output = process.StandardOutput.ReadToEnd();
+                    string error = process.StandardError.ReadToEnd();
+                    process.WaitForExit();
+
+                    _logger.Log(string.Format("Command completed with exit code: {0}", process.ExitCode), "DEBUG");
+
+                    if (process.ExitCode != 0 && !string.IsNullOrEmpty(error))
+                    {
+                        return "Error (exit code " + process.ExitCode + "): " + error;
+                    }
+                    return output;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Log("Error executing command: " + ex.Message, "ERROR");
+                return "Error executing command: " + ex.Message;
+            }
+        }
             [Description("Command to execute")] string command,
             [Description("Working directory (optional)")] string workingDir = null)
         {

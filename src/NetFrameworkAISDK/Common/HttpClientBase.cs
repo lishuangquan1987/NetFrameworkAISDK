@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -44,6 +44,7 @@ namespace NetFrameworkAISDK.Common
             try
             {
                 ServicePointManager.SecurityProtocol = Tls12 | Tls11 | Tls10;
+                ServicePointManager.DefaultConnectionLimit = 50;
                 _defaultLogger.Log("HttpClientBase: Configured SecurityProtocol to TLS 1.2, 1.1, and 1.0", "DEBUG");
             }
             catch (Exception ex)
@@ -346,52 +347,7 @@ namespace NetFrameworkAISDK.Common
                         onError(new ApiError("Empty response stream"));
                         return;
                     }
-                    using (StreamReader reader = new StreamReader(stream))
-                    {
-                        string line;
-                        while ((line = reader.ReadLine()) != null)
-                        {
-                            line = line.Trim();
-                            
-                            // 忽略空行和非 data: 开头的行（event:、id: 等）
-                            if (string.IsNullOrEmpty(line))
-                            {
-                                continue;
-                            }
-                            
-                            if (line.StartsWith("data:"))
-                            {
-                                // 安全提取 data: 后的内容
-                                int colonIndex = line.IndexOf(':');
-                                if (colonIndex < 0)
-                                {
-                                    continue;
-                                }
-                                string dataLine = line.Substring(colonIndex + 1).TrimStart();
-                                
-                                if (dataLine == "[DONE]")
-                                {
-                                    break;
-                                }
-                                
-                                // 忽略空数据
-                                if (string.IsNullOrWhiteSpace(dataLine))
-                                {
-                                    continue;
-                                }
-                                
-                                try
-                                {
-                                    T result = JsonHelper.Deserialize<T>(dataLine);
-                                    onData(result);
-                                }
-                                catch (Exception parseEx)
-                                {
-                                    _logger.Log("SSE parse error: " + parseEx.Message, "WARN");
-                                }
-                            }
-                        }
-                    }
+                    ParseSSEStream(stream, onData, onError);
                 }
             }
             catch (WebException ex)
@@ -402,6 +358,82 @@ namespace NetFrameworkAISDK.Common
             catch (Exception ex)
             {
                 onError(new ApiError(ex.Message));
+            }
+        }
+
+        /// <summary>
+        /// Parse SSE (Server-Sent Events) stream according to the specification.
+        /// Events are separated by double newlines. Multiple data: lines are concatenated.
+        /// </summary>
+        private void ParseSSEStream<T>(Stream stream, Action<T> onData, Action<ApiError> onError)
+        {
+            StringBuilder eventData = new StringBuilder();
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            string leftover = "";
+
+            while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                string chunk = leftover + Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                string[] lines = chunk.Split('\n');
+
+                leftover = lines[lines.Length - 1];
+
+                for (int i = 0; i < lines.Length - 1; i++)
+                {
+                    string line = lines[i].TrimEnd('\r').Trim();
+
+                    if (line.Length == 0)
+                    {
+                        if (eventData.Length > 0)
+                        {
+                            ProcessSSEEvent(eventData.ToString(), onData, onError);
+                            eventData.Clear();
+                        }
+                    }
+                    else if (line.StartsWith("data:"))
+                    {
+                        string data = line.Substring(5).TrimStart();
+                        if (eventData.Length > 0)
+                        {
+                            eventData.Append('\n');
+                        }
+                        eventData.Append(data);
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(leftover) && leftover.StartsWith("data:"))
+            {
+                string data = leftover.Substring(5).TrimStart().TrimEnd('\r');
+                eventData.Append(data);
+            }
+
+            if (eventData.Length > 0)
+            {
+                ProcessSSEEvent(eventData.ToString(), onData, onError);
+            }
+        }
+
+        /// <summary>
+        /// Process a single SSE event, deserializing it to the target type.
+        /// </summary>
+        private void ProcessSSEEvent<T>(string eventData, Action<T> onData, Action<ApiError> onError)
+        {
+            if (string.IsNullOrWhiteSpace(eventData) || eventData == "[DONE]")
+            {
+                return;
+            }
+
+            try
+            {
+                T result = JsonHelper.Deserialize<T>(eventData);
+                onData(result);
+            }
+            catch (Exception ex)
+            {
+                string truncated = eventData.Length > 100 ? eventData.Substring(0, 100) : eventData;
+                _logger.Log("SSE parse error: " + ex.Message + " | Data: " + truncated, "WARN");
             }
         }
 

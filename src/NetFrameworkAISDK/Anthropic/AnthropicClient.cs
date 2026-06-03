@@ -1,4 +1,4 @@
-using NetFrameworkAISDK.Common;
+﻿using NetFrameworkAISDK.Common;
 using System;
 using System.Collections.Generic;
 
@@ -454,7 +454,7 @@ namespace NetFrameworkAISDK.Anthropic
 
                     if (block.Type == "tool_use")
                     {
-                        if (block.Name == "structured_output")
+                        if (block.Name == "__internal_structured_output")
                         {
                             result.Content = block.Input != null ? JsonHelper.Serialize(block.Input) : "{}";
                             result.FinishReason = "stop";
@@ -501,7 +501,7 @@ namespace NetFrameworkAISDK.Anthropic
                 Type = "function",
                 Function = new FunctionDefinition
                 {
-                    Name = "structured_output",
+                    Name = "__internal_structured_output",
                     Description = "Output the structured data as a valid JSON object matching the required schema",
                     Parameters = schemaObj
                 }

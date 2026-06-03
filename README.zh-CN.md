@@ -1,4 +1,4 @@
-# NetFrameworkAISDK
+﻿# NetFrameworkAISDK
 
 > **面向 .NET Framework 4.0+ / .NET Standard 2.0 的 OpenAI & Anthropic SDK** — AI Agent、工具调用、结构化输出、MCP 客户端、技能管理。
 

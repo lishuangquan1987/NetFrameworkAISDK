@@ -1,4 +1,4 @@
-using NetFrameworkAISDK.Common;
+﻿using NetFrameworkAISDK.Common;
 using System;
 using System.Collections.Generic;
 
@@ -10,6 +10,8 @@ namespace NetFrameworkAISDK.OpenAI
     /// </summary>
     public class OpenAIClient : AIClientBase
     {
+        private readonly OpenAIClientOptions _options;
+
         private const string DefaultBaseUrl = "https://api.openai.com/v1";
 
         /// <summary>
@@ -17,7 +19,7 @@ namespace NetFrameworkAISDK.OpenAI
         /// </summary>
         /// <param name="apiKey">OpenAI API 密钥</param>
         public OpenAIClient(string apiKey)
-            : this(apiKey, DefaultBaseUrl, null)
+            : this(apiKey, DefaultBaseUrl, null, null)
         {
         }
 
@@ -27,7 +29,7 @@ namespace NetFrameworkAISDK.OpenAI
         /// <param name="apiKey">OpenAI API 密钥</param>
         /// <param name="baseUrl">自定义 API 基础 URL</param>
         public OpenAIClient(string apiKey, string baseUrl)
-            : this(apiKey, baseUrl, null)
+            : this(apiKey, baseUrl, null, null)
         {
         }
 
@@ -36,9 +38,20 @@ namespace NetFrameworkAISDK.OpenAI
         /// </summary>
         /// <param name="apiKey">OpenAI API 密钥</param>
         /// <param name="baseUrl">自定义 API 基础 URL</param>
-        /// <param name="logger">日志记录器（可选）</param>
         public OpenAIClient(string apiKey, string baseUrl, ILogger logger)
+            : this(apiKey, baseUrl, logger, null)
+        {
+        }
+
+        /// <summary>
+        /// 创建 OpenAI 客户端（完整配置）
+        /// </summary>
+        public OpenAIClient(string apiKey, string baseUrl, ILogger logger, OpenAIClientOptions options)
             : base(apiKey, baseUrl, logger)
+        {
+            _options = options ?? OpenAIClientOptions.Default;
+        }
+
         {
         }
 
@@ -345,15 +358,15 @@ namespace NetFrameworkAISDK.OpenAI
                         });
                     }
 
-                    // DeepSeek 要求 assistant+tool_calls 消息必须有非空 name 字段
-                    if (string.IsNullOrEmpty(chatMsg.Name))
+                    // 根据配置决定是否设置 name 字段（默认开启，支持 DeepSeek 等兼容 API）
+                    if (_options.EnableDeepSeekCompatibility && string.IsNullOrEmpty(chatMsg.Name))
                     {
                         chatMsg.Name = "assistant";
                     }
                 }
 
-                // DeepSeek 思考模式：reasoning_content 必须原样传回
-                if (!string.IsNullOrEmpty(msg.ReasoningContent))
+                // 根据配置决定是否保留 reasoning_content（默认开启）
+                if (_options.SupportReasoningContent && !string.IsNullOrEmpty(msg.ReasoningContent))
                 {
                     chatMsg.ReasoningContent = msg.ReasoningContent;
                 }

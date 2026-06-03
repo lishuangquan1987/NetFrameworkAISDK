@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -20,7 +20,8 @@ namespace NetFrameworkAISDK.Common
         private readonly ConversationOptions _options;
         private readonly List<AIFunction> _functions;
         private readonly Dictionary<string, AIFunction> _functionMap;
-        private readonly List<ConversationMessage> _conversationHistory;
+                private readonly object _historyLock = new object();
+
         private SkillManager _skillManager;
         private string _baseInstructions;
         private readonly ILogger _logger;
@@ -152,7 +153,10 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         public void ClearHistory()
         {
-            _conversationHistory.Clear();
+            lock (_historyLock)
+            {
+                _conversationHistory.Clear();
+            }
         }
 
         /// <summary>
@@ -160,10 +164,14 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         private void AddToHistory(ConversationMessage message)
         {
-            _conversationHistory.Add(message);
-            if (MaxHistoryMessages > 0 && _conversationHistory.Count > MaxHistoryMessages)
+            lock (_historyLock)
             {
-                TrimHistory(MaxHistoryMessages);
+                _conversationHistory.Add(message);
+                if (MaxHistoryMessages > 0 && _conversationHistory.Count > MaxHistoryMessages)
+                {
+                    int removeCount = _conversationHistory.Count - MaxHistoryMessages;
+                    _conversationHistory.RemoveRange(0, removeCount);
+                }
             }
         }
 
@@ -759,7 +767,7 @@ namespace NetFrameworkAISDK.Common
                     }
                     if (delta.FunctionArguments != null)
                     {
-                        existing.FunctionArguments = (existing.FunctionArguments != null ? existing.FunctionArguments : "") + delta.FunctionArguments;
+                        existing.FunctionArguments = (existing.FunctionArguments ?? "") + delta.FunctionArguments;
                     }
                     return;
                 }
@@ -845,7 +853,10 @@ namespace NetFrameworkAISDK.Common
         /// <returns>对话消息列表</returns>
         public List<ConversationMessage> GetHistory()
         {
-            return new List<ConversationMessage>(_conversationHistory);
+            lock (_historyLock)
+            {
+                return new List<ConversationMessage>(_conversationHistory);
+            }
         }
     }
 }
