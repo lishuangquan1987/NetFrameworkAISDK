@@ -1,4 +1,4 @@
-﻿using NetFrameworkAISDK.Common;
+using NetFrameworkAISDK.Common;
 using System;
 using System.Collections.Generic;
 
@@ -50,9 +50,6 @@ namespace NetFrameworkAISDK.OpenAI
             : base(apiKey, baseUrl, logger)
         {
             _options = options ?? OpenAIClientOptions.Default;
-        }
-
-        {
         }
 
         /// <inheritdoc />
