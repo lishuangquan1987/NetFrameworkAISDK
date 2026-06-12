@@ -68,13 +68,15 @@ namespace NetFrameworkAISDK.OpenAI
         /// <param name="temperature">温度参数 0-2（可选）</param>
         /// <param name="maxTokens">最大生成 token 数（可选）</param>
         /// <param name="tools">工具定义列表（可选）</param>
+        /// <param name="responseFormat">响应格式（可选，用于结构化输出）</param>
         /// <returns>包含聊天完成响应或错误的 ApiResponse</returns>
-        public ApiResponse<ChatCompletionResponse> CreateChatCompletion(
+        private ApiResponse<ChatCompletionResponse> CreateChatCompletion(
             string model,
             List<ChatMessage> messages,
             double? temperature = null,
             int? maxTokens = null,
-            List<ToolDefinition> tools = null)
+            List<ToolDefinition> tools = null,
+            OpenAiResponseFormat responseFormat = null)
         {
             var request = new ChatCompletionRequest
             {
@@ -83,6 +85,7 @@ namespace NetFrameworkAISDK.OpenAI
                 Temperature = temperature,
                 MaxTokens = maxTokens,
                 Tools = tools,
+                ResponseFormat = responseFormat,
                 Stream = false
             };
 
@@ -100,7 +103,7 @@ namespace NetFrameworkAISDK.OpenAI
         /// <param name="maxTokens">最大生成 token 数（可选）</param>
         /// <param name="tools">工具定义列表（可选）</param>
         /// <param name="responseFormat">响应格式（可选，用于结构化输出）</param>
-        public void CreateChatCompletionStream(
+        private void CreateChatCompletionStream(
             string model,
             List<ChatMessage> messages,
             Action<ChatCompletionStreamResponse> onData,
@@ -132,19 +135,10 @@ namespace NetFrameworkAISDK.OpenAI
             var openAiMessages = ConvertToOpenAiMessages(messages, options);
             var toolDefs = BuildToolDefinitions(options);
 
-            var request = new ChatCompletionRequest
-            {
-                Model = options.Model,
-                Messages = openAiMessages,
-                Temperature = options.Temperature,
-                MaxTokens = options.MaxTokens,
-                Tools = toolDefs,
-                Stream = false
-            };
-
+            OpenAiResponseFormat responseFormat = null;
             if (options.ResponseFormat != null)
             {
-                var responseFormat = new OpenAiResponseFormat
+                responseFormat = new OpenAiResponseFormat
                 {
                     Type = options.ResponseFormat.Type
                 };
@@ -159,11 +153,11 @@ namespace NetFrameworkAISDK.OpenAI
                         Schema = schemaObj
                     };
                 }
-
-                request.ResponseFormat = responseFormat;
             }
 
-            var response = Post<ChatCompletionResponse>("chat/completions", request);
+            var response = CreateChatCompletion(
+                options.Model, openAiMessages, options.Temperature,
+                options.MaxTokens, toolDefs, responseFormat);
 
             if (!response.IsSuccess)
             {

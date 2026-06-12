@@ -6,6 +6,7 @@ namespace NetFrameworkAISDK.OpenAI
     /// <summary>
     /// OpenAI 聊天消息，包含文本、图像内容和工具调用信息
     /// </summary>
+    [JsonConverter(typeof(ChatMessageJsonConverter))]
     public class ChatMessage
     {
         /// <summary>
@@ -22,7 +23,6 @@ namespace NetFrameworkAISDK.OpenAI
         /// 多模态内容块列表（用于图像等复杂内容）。
         /// 序列化为 "content" 以匹配 OpenAI API 多模态格式。
         /// </summary>
-        [JsonProperty("content")]
         public List<ImageContentPart> ContentParts { get; set; }
 
         /// <summary>

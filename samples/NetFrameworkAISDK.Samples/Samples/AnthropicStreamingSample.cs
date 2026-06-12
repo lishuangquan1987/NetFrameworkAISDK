@@ -1,6 +1,6 @@
 using NetFrameworkAISDK.Anthropic;
+using NetFrameworkAISDK.Common;
 using System;
-using System.Collections.Generic;
 
 namespace NetFrameworkAISDK.Samples
 {
@@ -13,7 +13,7 @@ namespace NetFrameworkAISDK.Samples
 
         public void Run()
         {
-            Console.WriteLine("\nThis sample demonstrates streaming message with Anthropic.");
+            Console.WriteLine("\nThis sample demonstrates streaming message with Anthropic AIAgent.");
             Console.WriteLine("----------------------------------------------------------");
             
             var config = SampleConfig.ReadFromConsole("Anthropic", "https://api.anthropic.com/v1", 
@@ -48,36 +48,24 @@ namespace NetFrameworkAISDK.Samples
                     client = new AnthropicClient(config.ApiKey);
                 }
 
+                string instructions = !string.IsNullOrEmpty(config.SystemPrompt)
+                    ? config.SystemPrompt
+                    : "You are a helpful assistant.";
+
+                var agent = new AIAgent(client, config.Model, instructions, null);
+
                 Console.WriteLine("\nEnter your message (type 'exit' to quit):");
                 Console.Write("You: ");
                 string userInput = Console.ReadLine();
 
                 while (userInput != "exit")
                 {
-                    var messages = new List<AnthropicMessage>
-                    {
-                        new AnthropicMessage { Role = AnthropicRole.User, Content = userInput }
-                    };
-
                     Console.Write("\nAssistant: ");
-                    
-                    client.CreateMessageStream(
-                        config.Model,
-                        messages,
-                        config.MaxTokens,
-                        onEvent: streamResponse =>
-                        {
-                            if (streamResponse.Delta != null && !string.IsNullOrEmpty(streamResponse.Delta.Text))
-                            {
-                                Console.Write(streamResponse.Delta.Text);
-                            }
-                        },
-                        onError: error =>
-                        {
-                            Console.WriteLine("\nError: " + error.Message);
-                        },
-                        system: string.IsNullOrEmpty(config.SystemPrompt) ? null : config.SystemPrompt,
-                        temperature: config.Temperature
+
+                    agent.RunStreaming(
+                        userInput,
+                        onUpdate: chunk => Console.Write(chunk),
+                        onError: error => Console.WriteLine("\nError: " + error.Message)
                     );
 
                     Console.WriteLine("\n\nEnter your message (type 'exit' to quit):");

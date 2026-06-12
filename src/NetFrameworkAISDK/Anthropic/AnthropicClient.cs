@@ -1,6 +1,7 @@
 ﻿using NetFrameworkAISDK.Common;
 using System;
 using System.Collections.Generic;
+using System.Net;
 
 namespace NetFrameworkAISDK.Anthropic
 {
@@ -60,7 +61,7 @@ namespace NetFrameworkAISDK.Anthropic
         /// <param name="temperature">温度参数 0-1（可选）</param>
         /// <param name="tools">工具定义列表（可选）</param>
         /// <returns>包含消息响应或错误的 ApiResponse</returns>
-        public ApiResponse<MessagesResponse> CreateMessage(
+        private ApiResponse<MessagesResponse> CreateMessage(
             string model,
             List<AnthropicMessage> messages,
             int maxTokens,
@@ -93,7 +94,7 @@ namespace NetFrameworkAISDK.Anthropic
         /// <param name="system">系统提示（可选）</param>
         /// <param name="temperature">温度参数 0-1（可选）</param>
         /// <param name="tools">工具定义列表（可选）</param>
-        public void CreateMessageStream(
+        private void CreateMessageStream(
             string model,
             List<AnthropicMessage> messages,
             int maxTokens,

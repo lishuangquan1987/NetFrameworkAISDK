@@ -60,7 +60,7 @@ namespace NetFrameworkAISDK.Common
         /// <param name="model">模型名称</param>
         /// <param name="instructions">系统指令/提示词</param>
         /// <param name="tools">可用的工具函数列表</param>
-        public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools)
+        public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools = null)
             : this(client, model, instructions, tools, false, (string[])null)
         {
         }
