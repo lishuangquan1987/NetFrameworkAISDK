@@ -20,7 +20,8 @@ namespace NetFrameworkAISDK.Common
         private readonly ConversationOptions _options;
         private readonly List<AIFunction> _functions;
         private readonly Dictionary<string, AIFunction> _functionMap;
-                private readonly object _historyLock = new object();
+        private readonly List<ConversationMessage> _conversationHistory;
+        private readonly object _historyLock = new object();
 
         private SkillManager _skillManager;
         private string _baseInstructions;

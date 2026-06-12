@@ -1,6 +1,7 @@
 using NetFrameworkAISDK.Common;
 using System;
 using System.Collections.Generic;
+using System.Net;
 
 namespace NetFrameworkAISDK.OpenAI
 {
@@ -38,6 +39,7 @@ namespace NetFrameworkAISDK.OpenAI
         /// </summary>
         /// <param name="apiKey">OpenAI API 密钥</param>
         /// <param name="baseUrl">自定义 API 基础 URL</param>
+        /// <param name="logger">日志记录器</param>
         public OpenAIClient(string apiKey, string baseUrl, ILogger logger)
             : this(apiKey, baseUrl, logger, null)
         {
