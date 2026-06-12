@@ -93,7 +93,7 @@ namespace NetFrameworkAISDK.Common
             };
 
             var result = new AIFunction();
-            result.Name = !string.IsNullOrEmpty(name) ? name : method.Name;
+            result.Name = !string.IsNullOrEmpty(name) ? name : AIFunctionFactory.GetCleanMethodName(method);
             result.Description = description;
             result.ParametersSchema = parameters;
             result.Execute = new Func<string, string>(argsJson => func());

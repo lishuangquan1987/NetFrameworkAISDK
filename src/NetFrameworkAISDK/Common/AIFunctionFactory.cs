@@ -34,6 +34,76 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
+        /// 从 MethodInfo 提取用户友好的方法名，处理编译器为局部函数生成的混淆名称。
+        /// 支持 [DisplayName] 特性显式指定名称。
+        /// </summary>
+        /// <param name="method">方法元数据</param>
+        /// <returns>清洁的函数名称（仅含 [a-zA-Z0-9_-]）</returns>
+        internal static string GetCleanMethodName(MethodInfo method)
+        {
+            // 优先使用 [DisplayName] 显式指定
+            var displayAttr = method.GetCustomAttributes(typeof(DisplayNameAttribute), false);
+            if (displayAttr.Length > 0)
+            {
+                return SanitizeName(((DisplayNameAttribute)displayAttr[0]).DisplayName);
+            }
+
+            string rawName = method.Name;
+
+            // 不含 '<' 说明是普通方法，已经是清洁名称
+            if (rawName.IndexOf('<') < 0)
+            {
+                return rawName;
+            }
+
+            // 编译器局部函数模式: <<ContainingMethod>$>g__UserName|Index
+            // 提取 "g__" 和 "|" 之间的部分
+            int gIdx = rawName.IndexOf("g__");
+            if (gIdx >= 0)
+            {
+                int start = gIdx + 3; // 跳过 "g__"
+                int pipeIdx = rawName.IndexOf('|', start);
+                if (pipeIdx > start)
+                {
+                    return SanitizeName(rawName.Substring(start, pipeIdx - start));
+                }
+                // 没有 '|'，取到末尾
+                return SanitizeName(rawName.Substring(start));
+            }
+
+            // Lambda 表达式或其他编译器生成的匿名方法
+            // 没有用户友好的名称，必须使用 [DisplayName]
+            throw new InvalidOperationException(
+                string.Format("Cannot determine function name from compiler-generated method '{0}'. " +
+                    "Use AIFunctionFactory.Create(delegate, string name) overload or add [DisplayName(\"your_name\")] attribute.",
+                    rawName));
+        }
+
+        /// <summary>
+        /// 将名称中的非法字符替换为 '_'，确保只含 [a-zA-Z0-9_-]
+        /// </summary>
+        private static string SanitizeName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "unnamed";
+
+            var chars = name.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                char c = chars[i];
+                bool valid = (c >= 'a' && c <= 'z')
+                    || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9')
+                    || c == '_'
+                    || c == '-';
+                if (!valid)
+                {
+                    chars[i] = '_';
+                }
+            }
+            return new string(chars);
+        }
+
+        /// <summary>
         /// 从单个方法创建 AI 函数
         /// </summary>
         /// <param name="method">要封装的方法</param>
@@ -41,7 +111,7 @@ namespace NetFrameworkAISDK.Common
         /// <returns>AIFunction 实例</returns>
         public static AIFunction Create(MethodInfo method, object target)
         {
-            var name = method.Name;
+            var name = GetCleanMethodName(method);
             var descAttr = GetDescriptionAttribute(method);
             var description = descAttr != null ? descAttr.Description : name;
 
@@ -211,7 +281,15 @@ namespace NetFrameworkAISDK.Common
                 }
 
                 var result = method.Invoke(target, args);
-                return result != null ? result.ToString() : "";
+                if (result == null)
+                {
+                    return "";
+                }
+                if (result is string)
+                {
+                    return (string)result;
+                }
+                return JsonHelper.Serialize(result);
             }
             catch (Exception ex)
             {
