@@ -20,6 +20,8 @@ namespace NetFrameworkAISDK.Common
         private const SecurityProtocolType Tls10 = (SecurityProtocolType)192;
         private const SecurityProtocolType Tls11 = (SecurityProtocolType)768;
         private const SecurityProtocolType Tls12 = (SecurityProtocolType)3072;
+        // 48 = SSL 3.0（Windows XP 最终回退）
+        private const SecurityProtocolType Ssl3 = (SecurityProtocolType)48;
 
         /// <summary>API 密钥</summary>
         protected readonly string ApiKey;
@@ -43,14 +45,37 @@ namespace NetFrameworkAISDK.Common
         {
             try
             {
-                ServicePointManager.SecurityProtocol = Tls12 | Tls11 | Tls10;
-                ServicePointManager.DefaultConnectionLimit = 50;
-                _defaultLogger.Log("HttpClientBase: Configured SecurityProtocol to TLS 1.2, 1.1, and 1.0", "DEBUG");
+                SecurityProtocolType supportedProtocols = 0;
+
+                // 逐个探测操作系统支持的协议，从高到低尝试
+                try { ServicePointManager.SecurityProtocol = Tls12; supportedProtocols |= Tls12; }
+                catch (NotSupportedException) { }
+
+                try { ServicePointManager.SecurityProtocol = Tls11; supportedProtocols |= Tls11; }
+                catch (NotSupportedException) { }
+
+                try { ServicePointManager.SecurityProtocol = Tls10; supportedProtocols |= Tls10; }
+                catch (NotSupportedException) { }
+
+                try { ServicePointManager.SecurityProtocol = Ssl3; supportedProtocols |= Ssl3; }
+                catch (NotSupportedException) { }
+
+                if (supportedProtocols != 0)
+                {
+                    ServicePointManager.SecurityProtocol = supportedProtocols;
+                    _defaultLogger.Log("HttpClientBase: Configured SecurityProtocol to " + supportedProtocols.ToString(), "DEBUG");
+                }
+                else
+                {
+                    _defaultLogger.Log("HttpClientBase: No supported SecurityProtocol found, using system default", "WARN");
+                }
             }
             catch (Exception ex)
             {
                 _defaultLogger.Log("HttpClientBase: Failed to configure SecurityProtocol: " + ex.Message, "ERROR");
             }
+
+            ServicePointManager.DefaultConnectionLimit = 50;
         }
 
         /// <summary>
