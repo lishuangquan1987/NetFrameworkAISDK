@@ -5,8 +5,6 @@ using System.ComponentModel;
 
 Console.WriteLine("Hello, World!");
 
-HttpClientBase.ForceTlsProxyForDiagnostics();
-
 string url = "https://u701357-b42c-d29bc5d1.westc.seetacloud.com:8443/v1";
 string model = "Qwen3.6-35B-A3B-FP8";
 string apiKey = "test";

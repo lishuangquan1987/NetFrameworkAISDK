@@ -10,41 +10,45 @@ namespace NetFrameworkAISDK.Samples
     {
         public string Name
         {
-            get { return "MCP Tool Calling - Connect MCP Server + OpenAI/Anthropic"; }
+            get { return "MCP Tool Calling — SQLite3 + CodeGraph"; }
         }
 
         public void Run()
         {
-            Console.WriteLine("\nThis sample demonstrates how to connect to an MCP server,");
-            Console.WriteLine("discover tools, and inject them into OpenAI/Anthropic agents.");
+            Console.WriteLine("\nThis sample connects to two MCP servers and discovers their tools.");
             Console.WriteLine("------------------------------------------------------------------------");
 
-            Console.WriteLine("\nStep 1: Configure MCP Server");
-            Console.WriteLine("----------------------------------------------------------------");
-            Console.WriteLine("Enter the path to the MCP server executable.");
-            Console.WriteLine("  Example: node C:/path/to/mcp-server/index.js");
-            Console.WriteLine("  Example: python C:/path/to/mcp-server/main.py");
-            Console.WriteLine("  Example: C:/path/to/mcp-server.exe");
-            Console.Write("MCP Server Path: ");
-            string serverPath = Console.ReadLine();
+            // MCP Server 1: mcp_sqlite3 (database tools)
+            var sqliteFunctions = TestMcpServer(
+                "mcp_sqlite3",
+                "python",
+                "-m mcp_sqlite3 \"E:\\Yofc\\Code\\OTDR\\OTDR3001\\YOFC.OTDR3001\\YOFC.OTDR3001\\bin\\Debug\\netcoreapp3.1-windows\\win-x64\\TestData\\otdr_data.db\"",
+                runAgentTest: true);
 
-            if (string.IsNullOrEmpty(serverPath))
-            {
-                Console.WriteLine("MCP Server path is required. Skipping sample.");
-                return;
-            }
+            Console.WriteLine("\n");
 
-            Console.Write("Arguments (optional, press Enter for none): ");
-            string arguments = Console.ReadLine();
+            // MCP Server 2: codegraph (code intelligence tools)
+            TestMcpServer(
+                "codegraph",
+                "node",
+                "\"C:\\Users\\5001494\\AppData\\Roaming\\npm\\node_modules\\@colbymchenry\\codegraph\\npm-shim.js\" serve --mcp -p \"E:\\Project2026\\NetFramework-AI-SDK\"",
+                runAgentTest: false);
+        }
+
+        private List<AIFunction> TestMcpServer(string label, string serverPath, string arguments, bool runAgentTest)
+        {
+            Console.WriteLine("\n============================================================");
+            Console.WriteLine("  MCP Server: " + label);
+            Console.WriteLine("  Command: " + serverPath + " " + arguments);
+            Console.WriteLine("============================================================\n");
 
             McpClient mcpClient = new McpClient();
             Console.Write("\nConnecting to MCP server... ");
-
             var connectResult = mcpClient.Connect(serverPath, arguments);
             if (!connectResult.IsSuccess)
             {
-                Console.WriteLine("\nError: " + connectResult.Error.Message);
-                return;
+                Console.WriteLine("FAIL: " + connectResult.Error.Message);
+                return null;
             }
             Console.WriteLine("Connected.");
 
@@ -54,7 +58,7 @@ namespace NetFrameworkAISDK.Samples
             {
                 Console.WriteLine("\nError: " + initResult.Error.Message);
                 mcpClient.Dispose();
-                return;
+                return null;
             }
             Console.WriteLine("Done.");
 
@@ -65,7 +69,7 @@ namespace NetFrameworkAISDK.Samples
             {
                 Console.WriteLine("Error listing tools: " + toolsResult.Error.Message);
                 mcpClient.Dispose();
-                return;
+                return null;
             }
 
             var mcpTools = toolsResult.Result;
@@ -73,7 +77,7 @@ namespace NetFrameworkAISDK.Samples
             {
                 Console.WriteLine("No tools discovered from MCP server.");
                 mcpClient.Dispose();
-                return;
+                return null;
             }
 
             Console.WriteLine("Discovered " + mcpTools.Count + " tool(s):");
@@ -81,46 +85,24 @@ namespace NetFrameworkAISDK.Samples
             foreach (var tool in mcpTools)
             {
                 Console.WriteLine("\n  - " + tool.Name + ": " + (tool.Description ?? "(no description)"));
-                mcpFunctions.Add(AIFunction.CreateFromMcpTool(
-                    tool.Name,
-                    tool.Description,
-                    tool.InputSchema,
-                    new Func<string, string>(args =>
-                    {
-                        var result = mcpClient.CallTool(tool.Name, args);
-                        if (result.IsSuccess)
-                        {
-                            return result.Result;
-                        }
-                        return "Error: " + result.Error.Message;
-                    })
-                ));
+                mcpFunctions.Add(mcpClient.CreateAIFunction(tool));
             }
 
-            Console.WriteLine("\nStep 3: Choose AI Provider");
+            Console.WriteLine("\nStep 3: Test MCP Tools Directly");
             Console.WriteLine("----------------------------------------------------------------");
-            Console.WriteLine("1. Test with OpenAI (tools/list and tools/call only)");
-            Console.WriteLine("2. Use with OpenAI AIAgent (interactive chat)");
-            Console.WriteLine("3. Use with Anthropic (interactive chat)");
-            Console.WriteLine("0. Skip (just show MCP tools)");
-            Console.Write("\nYour choice: ");
-            string providerChoice = Console.ReadLine();
+            TestMcpToolsDirectly(mcpClient, mcpTools);
 
-            if (providerChoice == "1")
+            // AIAgent 交互测试
+            if (runAgentTest)
             {
-                TestMcpToolsDirectly(mcpClient, mcpTools);
-            }
-            else if (providerChoice == "2")
-            {
-                RunOpenAIAgentWithMcp(mcpFunctions);
-            }
-            else if (providerChoice == "3")
-            {
-                RunAnthropicWithMcp(mcpFunctions);
-            }
-            else
-            {
-                Console.WriteLine("\nSkipping AI provider test.");
+                Console.WriteLine("\nStep 4: AIAgent with MCP Tools (auto-test)");
+                Console.WriteLine("----------------------------------------------------------------");
+                RunAIAgentAutoTest(mcpFunctions);
+
+                // 重置 mcpClient 以继续使用
+                Console.WriteLine("\nResetting MCP connection...");
+                mcpClient.Dispose();
+                return mcpFunctions;
             }
 
             Console.WriteLine("\nStep 4: Cleanup");
@@ -128,6 +110,7 @@ namespace NetFrameworkAISDK.Samples
             mcpClient.Shutdown();
             mcpClient.Dispose();
             Console.WriteLine("MCP server disconnected.");
+            return mcpFunctions;
         }
 
         private void TestMcpToolsDirectly(McpClient mcpClient, List<McpToolInfo> mcpTools)
@@ -149,6 +132,34 @@ namespace NetFrameworkAISDK.Samples
                     Console.WriteLine("Error: " + result.Error.Message);
                 }
             }
+        }
+
+        private void RunAIAgentAutoTest(List<AIFunction> mcpFunctions)
+        {
+            const string url = "https://u701357-b42c-d29bc5d1.westc.seetacloud.com:8443/v1";
+            const string model = "Qwen3.6-35B-A3B-FP8";
+
+            Console.WriteLine("Creating OpenAI client...");
+            var client = new OpenAIClient("111", url);
+
+            string toolNames = "";
+            foreach (var f in mcpFunctions) toolNames += (toolNames.Length > 0 ? ", " : "") + f.Name;
+
+            var agent = new AIAgent(client, model,
+                "You are a database assistant. Use the MCP tools to answer questions.", mcpFunctions);
+            agent.MaxIterations = 5;
+
+            Console.WriteLine("Agent ready with tools: " + toolNames);
+            Console.WriteLine("\n--- Auto-test: ask AI to list tables ---");
+            Console.WriteLine("User: 枚举数据库中的表，看看有多少个");
+            Console.Write("Assistant: ");
+
+            agent.RunStreaming(
+                "请先用 connect_database 连接 E:\\Yofc\\Code\\OTDR\\OTDR3001\\YOFC.OTDR3001\\YOFC.OTDR3001\\bin\\Debug\\netcoreapp3.1-windows\\win-x64\\TestData\\otdr_data.db，然后用 list_tables 列出所有表，最后告诉我一共有多少个表。",
+                onUpdate: chunk => Console.Write(chunk),
+                onError: err => Console.Write("[ERROR: " + err.Message + "]"),
+                onToolCall: e => Console.Write("\n  [Tool: " + e.FunctionName + "(" + e.FunctionArguments + ")] "));
+            Console.WriteLine();
         }
 
         private void RunOpenAIAgentWithMcp(List<AIFunction> mcpFunctions)

@@ -101,24 +101,6 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
-        /// 从 MCP 工具创建函数
-        /// </summary>
-        /// <param name="name">工具名称</param>
-        /// <param name="description">工具描述</param>
-        /// <param name="inputSchema">参数 Schema（JSON Schema 格式）</param>
-        /// <param name="execute">执行回调</param>
-        /// <returns>AI 函数实例</returns>
-        public static AIFunction CreateFromMcpTool(string name, string description, object inputSchema, Func<string, string> execute)
-        {
-            var result = new AIFunction();
-            result.Name = name;
-            result.Description = description;
-            result.Parameters = inputSchema;
-            result.Execute = execute;
-            return result;
-        }
-
-        /// <summary>
         /// 转换为 OpenAI ToolDefinition 格式
         /// </summary>
         /// <returns>工具定义对象</returns>

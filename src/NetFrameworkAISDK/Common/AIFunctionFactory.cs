@@ -34,6 +34,20 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
+        /// 直接构造 AIFunction（无需委托反射）
+        /// </summary>
+        public static AIFunction Create(string name, string description, object parameters, Func<string, string> execute)
+        {
+            return new AIFunction
+            {
+                Name = name,
+                Description = description,
+                Parameters = parameters,
+                Execute = execute
+            };
+        }
+
+        /// <summary>
         /// 从 MethodInfo 提取用户友好的方法名，处理编译器为局部函数生成的混淆名称。
         /// 支持 [DisplayName] 特性显式指定名称。
         /// </summary>

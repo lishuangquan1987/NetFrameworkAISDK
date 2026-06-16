@@ -20,7 +20,6 @@ namespace NetFrameworkAISDK.Common
         private bool _initialized;
         private bool _disposed;
         private volatile bool _aborted;
-        private volatile bool _readCancelled;
         private int _timeoutMilliseconds;
         private readonly object _sendLock;
         private readonly ILogger _logger;
@@ -80,6 +79,12 @@ namespace NetFrameworkAISDK.Common
         {
             try
             {
+                var path = serverPath;
+                if (!Path.IsPathRooted(serverPath))
+                {
+                    path=Path.GetFullPath(serverPath);
+                }
+
                 var psi = new ProcessStartInfo(serverPath, arguments ?? "")
                 {
                     RedirectStandardInput = true,
@@ -92,18 +97,25 @@ namespace NetFrameworkAISDK.Common
                 _process = new Process { StartInfo = psi };
                 _process.Start();
 
-                if (!_process.WaitForInputIdle(2000))
+                try
                 {
-                    if (_process.HasExited)
+                    if (!_process.WaitForInputIdle(2000))
                     {
-                        int exitCode = _process.ExitCode;
-                        _process.Dispose();
-                        _process = null;
-                        return new ApiResponse<bool> { Error = new ApiError("MCP server process exited immediately with code: " + exitCode) };
+                        if (_process.HasExited)
+                        {
+                            int exitCode = _process.ExitCode;
+                            _process.Dispose();
+                            _process = null;
+                            return new ApiResponse<bool> { Error = new ApiError("MCP server process exited immediately with code: " + exitCode) };
+                        }
                     }
                 }
+                catch (InvalidOperationException)
+                {
+                    // 控制台程序无 GUI 消息循环，WaitForInputIdle 会抛此异常，忽略即可
+                }
 
-                _stdin = new StreamWriter(_process.StandardInput.BaseStream, Encoding.UTF8);
+                _stdin = new StreamWriter(_process.StandardInput.BaseStream, new UTF8Encoding(false));
                 _stdout = new StreamReader(_process.StandardOutput.BaseStream, Encoding.UTF8);
                 _requestId = 0;
 
@@ -149,6 +161,9 @@ namespace NetFrameworkAISDK.Common
                 {
                     return new ApiResponse<bool> { Error = response.Error };
                 }
+
+                // MCP 协议要求：收到 initialize 响应后必须发送 initialized 通知
+                SendNotification("notifications/initialized", new Dictionary<string, object>());
 
                 _initialized = true;
                 return new ApiResponse<bool> { Result = true };
@@ -230,10 +245,17 @@ namespace NetFrameworkAISDK.Common
 
             try
             {
+                // 若 arguments 是 JSON 字符串，反序列化为对象（AI model 传来的是 string）
+                object parsedArgs = arguments;
+                if (arguments is string && !string.IsNullOrEmpty((string)arguments))
+                {
+                    try { parsedArgs = JsonHelper.Deserialize<object>((string)arguments); } catch { }
+                }
+
                 var response = SendRequest("tools/call", new Dictionary<string, object>
                 {
                     { "name", toolName },
-                    { "arguments", arguments ?? new Dictionary<string, object>() }
+                    { "arguments", parsedArgs ?? new Dictionary<string, object>() }
                 });
 
                 if (!response.IsSuccess)
@@ -253,6 +275,39 @@ namespace NetFrameworkAISDK.Common
             {
                 return new ApiResponse<string> { Error = new ApiError("MCP call_tool failed: " + ex.Message) };
             }
+        }
+
+        /// <summary>
+        /// 将 MCP 工具转换为 AIFunction，自动绑定到本客户端实例
+        /// </summary>
+        /// <param name="toolInfo">MCP 工具信息</param>
+        /// <returns>可注入 AIAgent 的 AIFunction 实例</returns>
+        public AIFunction CreateAIFunction(McpToolInfo toolInfo)
+        {
+            var client = this;
+            return AIFunctionFactory.Create(toolInfo.Name, toolInfo.Description, toolInfo.InputSchema,
+                new Func<string, string>(args =>
+                {
+                    var result = client.CallTool(toolInfo.Name, args);
+                    return result.IsSuccess ? result.Result : "Error: " + result.Error.Message;
+                }));
+        }
+
+        /// <summary>
+        /// 获取工具列表并全部转换为 AIFunction
+        /// </summary>
+        public ApiResponse<List<AIFunction>> ListAsAIFunctions()
+        {
+            var toolsResult = ListTools();
+            if (!toolsResult.IsSuccess)
+                return new ApiResponse<List<AIFunction>> { Error = toolsResult.Error };
+
+            var functions = new List<AIFunction>();
+            foreach (var tool in toolsResult.Result)
+            {
+                functions.Add(CreateAIFunction(tool));
+            }
+            return new ApiResponse<List<AIFunction>> { Result = functions };
         }
 
         /// <summary>
@@ -283,7 +338,6 @@ namespace NetFrameworkAISDK.Common
                 _disposed = true;
                 Shutdown();
                 _aborted = true;
-                _readCancelled = true;
                 if (_stdin != null) { try { _stdin.Close(); } catch { } }
                 if (_stdout != null) { try { _stdout.Close(); } catch { } }
                 if (_process != null)
@@ -307,7 +361,6 @@ namespace NetFrameworkAISDK.Common
         public void Reset()
         {
             _aborted = false;
-            _readCancelled = false;
         }
 
         /// <summary>
@@ -324,23 +377,16 @@ namespace NetFrameworkAISDK.Common
             }
 
             string result = null;
+            Exception readEx = null;
             var thread = new Thread(() =>
             {
                 try
                 {
-                    while (!_readCancelled)
-                    {
-                        if (_stdout.Peek() >= 0)
-                        {
-                            result = _stdout.ReadLine();
-                            break;
-                        }
-                        Thread.Sleep(50);
-                    }
+                    result = _stdout.ReadLine();
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    result = null;
+                    readEx = ex;
                 }
             });
             thread.IsBackground = true;
@@ -348,11 +394,14 @@ namespace NetFrameworkAISDK.Common
 
             if (thread.Join(timeoutMs))
             {
+                if (readEx != null)
+                {
+                    _logger.Log("ReadLineWithTimeout read error: " + readEx.Message, "WARN");
+                }
                 return result;
             }
 
-            _readCancelled = true;
-            Thread.Sleep(100);
+            // 超时：不强制 Abort（会损坏进程状态），仅标记取消并返回 null
             return null;
         }
 
@@ -417,6 +466,23 @@ namespace NetFrameworkAISDK.Common
                 _logger.Log("MCP request completed successfully", "DEBUG");
                 return new ApiResponse<object> { Result = response.Result };
             }
+        }
+
+        /// <summary>
+        /// 发送 JSON-RPC 通知（无需响应，不计入 requestId）
+        /// </summary>
+        private void SendNotification(string method, object parameters)
+        {
+            var notification = new Dictionary<string, object>
+            {
+                { "jsonrpc", "2.0" },
+                { "method", method },
+                { "params", parameters }
+            };
+
+            string json = JsonHelper.Serialize(notification);
+            _stdin.WriteLine(json);
+            _stdin.Flush();
         }
     }
 }
