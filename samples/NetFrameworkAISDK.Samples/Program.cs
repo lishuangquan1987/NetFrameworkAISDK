@@ -51,6 +51,9 @@ namespace NetFrameworkAISDK.Samples
                     case "11":
                         RunSample(new AutoTestRunner());
                         break;
+                    case "12":
+                        RunSample(new TlsProxySample());
+                        break;
                     case "0":
                         Console.WriteLine("\nExiting...");
                         return;
@@ -75,6 +78,7 @@ namespace NetFrameworkAISDK.Samples
             Console.WriteLine("9. Multimodal Chat - Image + Text Input with AIAgent");
             Console.WriteLine("10. Structured Output - AI returns typed objects");
             Console.WriteLine("11. Auto-Test — Run All OpenAI Tests");
+            Console.WriteLine("12. TLS Proxy — BouncyCastle Proxy Test");
             Console.WriteLine("0. Exit");
             Console.WriteLine();
             Console.Write("Enter your choice: ");

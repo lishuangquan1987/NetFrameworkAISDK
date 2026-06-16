@@ -46,6 +46,9 @@ namespace NetFrameworkAISDK.Samples
 
             try
             {
+                HttpClientBase.ForceTlsProxyForDiagnostics();
+                Console.WriteLine("[INFO] BouncyCastle TLS Proxy enabled for this test.\n");
+
                 _client = new OpenAIClient(TestApiKey, TestUrl);
                 Console.WriteLine("[INFO] OpenAIClient 创建成功。\n");
             }

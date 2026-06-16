@@ -29,6 +29,24 @@ namespace NetFrameworkAISDK.Common
         /// <summary>API 基础 URL</summary>
         protected readonly string BaseUrl;
 
+        /// <summary>从 BaseUrl 提取的 host:port（用于代理 X-Target-Host 头）</summary>
+        private string BaseUrlHost
+        {
+            get
+            {
+                try
+                {
+                    var uri = new Uri(BaseUrl);
+                    return uri.Host + ":" + uri.Port;
+                }
+                catch (UriFormatException ex)
+                {
+                    _defaultLogger.Log("HttpClientBase: Failed to parse BaseUrl '" + BaseUrl + "': " + ex.Message, "ERROR");
+                    return null;
+                }
+            }
+        }
+
         /// <summary>请求超时毫秒数</summary>
         protected readonly int TimeoutMilliseconds;
 
@@ -41,6 +59,13 @@ namespace NetFrameworkAISDK.Common
         /// <summary>默认日志记录器（静态初始化及回退使用）</summary>
         private static readonly ILogger _defaultLogger = new ConsoleLogger();
 
+        /// <summary>TLS 1.2 是否被 OS 支持</summary>
+        private static bool _tls12Supported;
+        /// <summary>BouncyCastle 代理是否启用（XP 且不支持 TLS 1.2 时）</summary>
+        private static bool _proxyEnabled;
+        /// <summary>代理监听端口</summary>
+        private static int _proxyPort;
+
         static HttpClientBase()
         {
             try
@@ -48,8 +73,10 @@ namespace NetFrameworkAISDK.Common
                 SecurityProtocolType supportedProtocols = 0;
 
                 // 逐个探测操作系统支持的协议，从高到低尝试
-                try { ServicePointManager.SecurityProtocol = Tls12; supportedProtocols |= Tls12; }
+                bool tls12Ok = false;
+                try { ServicePointManager.SecurityProtocol = Tls12; supportedProtocols |= Tls12; tls12Ok = true; }
                 catch (NotSupportedException) { }
+                _tls12Supported = tls12Ok;
 
                 try { ServicePointManager.SecurityProtocol = Tls11; supportedProtocols |= Tls11; }
                 catch (NotSupportedException) { }
@@ -76,6 +103,64 @@ namespace NetFrameworkAISDK.Common
             }
 
             ServicePointManager.DefaultConnectionLimit = 50;
+            ServicePointManager.Expect100Continue = false;
+            _defaultLogger.Log("HttpClientBase: Configured DefaultConnectionLimit=50, Expect100Continue=false", "DEBUG");
+
+            // Windows XP 且 TLS 1.2 不被 OS 支持 → 启动 BouncyCastle 代理
+            if (!_tls12Supported && IsWindowsXP())
+            {
+                try
+                {
+                    BouncyCastleTlsProxy.Instance.Start();
+                    _proxyEnabled = true;
+                    _proxyPort = BouncyCastleTlsProxy.Instance.Port;
+                    _defaultLogger.Log("HttpClientBase: Started BouncyCastle TLS proxy on 127.0.0.1:" + _proxyPort, "INFO");
+                }
+                catch (Exception ex)
+                {
+                    _defaultLogger.Log("HttpClientBase: Failed to start TLS proxy: " + ex.Message, "ERROR");
+                }
+            }
+        }
+
+        /// <summary>检测是否为 Windows XP/Server 2003（版本号 5.x）</summary>
+        private static bool IsWindowsXP()
+        {
+            return Environment.OSVersion.Version.Major == 5;
+        }
+
+        /// <summary>
+        /// 【诊断用】强制启用 BouncyCastle TLS 代理，绕过 SChannel 直连。
+        /// 在创建任何客户端之前调用；调用后所有 HTTPS 走本地代理。
+        /// 非 XP 系统仅用于测试代理功能，生产环境无需调用。
+        /// </summary>
+        public static void ForceTlsProxyForDiagnostics()
+        {
+            try
+            {
+                BouncyCastleTlsProxy.Instance.Start();
+                _proxyEnabled = true;
+                _proxyPort = BouncyCastleTlsProxy.Instance.Port;
+                _defaultLogger.Log("HttpClientBase: TLS proxy FORCE-ENABLED on 127.0.0.1:" + _proxyPort + " (diagnostic)", "WARN");
+            }
+            catch (Exception ex)
+            {
+                _defaultLogger.Log("HttpClientBase: Failed to start diagnostic TLS proxy: " + ex.Message, "ERROR");
+            }
+        }
+
+        /// <summary>配置代理模式的请求参数（HTTP/1.0 + 新连接隔离 + X-Target-Host）</summary>
+        private void ConfigureProxyRequest(HttpWebRequest request)
+        {
+            request.KeepAlive = false;
+            request.ProtocolVersion = HttpVersion.Version10;
+            request.ServicePoint.ConnectionLeaseTimeout = 0;
+            request.ConnectionGroupName = Guid.NewGuid().ToString("N");
+            string host = BaseUrlHost;
+            if (!string.IsNullOrEmpty(host))
+            {
+                request.Headers["X-Target-Host"] = host;
+            }
         }
 
         /// <summary>
@@ -233,10 +318,17 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
-        /// 构建请求 URL
+        /// 构建请求 URL（代理启用时改写为本地 HTTP 代理地址）
         /// </summary>
         private string BuildUrl(string endpoint)
         {
+            if (_proxyEnabled)
+            {
+                var origBaseUri = new Uri(BaseUrl + "/");
+                var targetUri = new Uri(origBaseUri, endpoint.TrimStart('/'));
+                return "http://127.0.0.1:" + _proxyPort + targetUri.PathAndQuery;
+            }
+
             var baseUri = new Uri(BaseUrl + "/");
             return new Uri(baseUri, endpoint.TrimStart('/')).ToString();
         }
@@ -246,6 +338,16 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         private string BuildUrlWithQuery(string endpoint, object queryParams)
         {
+            if (_proxyEnabled)
+            {
+                var origBaseUri = new Uri(BaseUrl + "/");
+                var targetUri = new Uri(origBaseUri, endpoint.TrimStart('/'));
+                string query = queryParams != null ? BuildQueryString(queryParams) : "";
+                string existing = targetUri.Query;
+                if (!string.IsNullOrEmpty(existing))
+                    query = string.IsNullOrEmpty(query) ? existing : existing + "&" + query.TrimStart('?');
+                return "http://127.0.0.1:" + _proxyPort + targetUri.AbsolutePath + query;
+            }
             var baseUri = new Uri(BaseUrl + "/");
             var uri = new Uri(baseUri, endpoint.TrimStart('/'));
             if (queryParams != null)
@@ -288,6 +390,10 @@ namespace NetFrameworkAISDK.Common
                 request.Timeout = TimeoutMilliseconds;
                 request.ReadWriteTimeout = TimeoutMilliseconds;
                 ConfigureRequest(request);
+                if (_proxyEnabled)
+                {
+                    ConfigureProxyRequest(request);
+                }
 
                 if (data != null && (method == "POST" || method == "PUT"))
                 {
@@ -345,44 +451,73 @@ namespace NetFrameworkAISDK.Common
         /// <param name="onError">发生错误时的回调</param>
         protected void PostStream<T>(string endpoint, object data, Action<T> onData, Action<ApiError> onError)
         {
-            try
+            string url = BuildUrl(endpoint);
+            string json = JsonHelper.Serialize(data);
+            byte[] bytes = Encoding.UTF8.GetBytes(json);
+
+            int attempt = 0;
+            while (true)
             {
-                string url = BuildUrl(endpoint);
-
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
-                request.Method = "POST";
-                request.ContentType = "application/json";
-                request.Timeout = TimeoutMilliseconds;
-                request.ReadWriteTimeout = TimeoutMilliseconds;
-                ConfigureRequest(request);
-
-                string json = JsonHelper.Serialize(data);
-                byte[] bytes = Encoding.UTF8.GetBytes(json);
-                request.ContentLength = bytes.Length;
-                using (Stream stream = request.GetRequestStream())
+                try
                 {
-                    stream.Write(bytes, 0, bytes.Length);
-                }
-
-                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-                using (Stream stream = response.GetResponseStream())
-                {
-                    if (stream == null)
+                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+                    request.Method = "POST";
+                    request.ContentType = "application/json";
+                    request.Timeout = TimeoutMilliseconds;
+                    request.ReadWriteTimeout = TimeoutMilliseconds;
+                    request.ContentLength = bytes.Length;
+                    ConfigureRequest(request);
+                    if (_proxyEnabled)
                     {
-                        onError(new ApiError("Empty response stream"));
+                        ConfigureProxyRequest(request);
+                    }
+
+                    using (Stream requestStream = request.GetRequestStream())
+                    {
+                        requestStream.Write(bytes, 0, bytes.Length);
+                    }
+
+                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                    using (Stream responseStream = response.GetResponseStream())
+                    {
+                        if (responseStream == null)
+                        {
+                            onError(new ApiError("Empty response stream"));
+                            return;
+                        }
+                        ParseSSEStream(responseStream, onData, onError);
                         return;
                     }
-                    ParseSSEStream(stream, onData, onError);
                 }
-            }
-            catch (WebException ex)
-            {
-                ApiResponse<T> errorResponse = HandleWebException<T>(ex);
-                onError(errorResponse.Error);
-            }
-            catch (Exception ex)
-            {
-                onError(new ApiError(ex.Message));
+                catch (WebException ex)
+                {
+                    // 已收到 HTTP 响应（非传输层错误）→ 不重试，直接返回
+                    if (ex.Response != null)
+                    {
+                        ApiResponse<T> errorResponse = HandleWebException<T>(ex);
+                        onError(errorResponse.Error);
+                        return;
+                    }
+
+                    // 传输层错误 → 检查是否应重试
+                    if (ShouldRetry(ex, attempt))
+                    {
+                        int delay = RetryDelayMilliseconds * (int)Math.Pow(2, attempt);
+                        _logger.Log(string.Format("PostStream retry {0}/{1} after {2}ms: {3}", attempt + 1, MaxRetries, delay, ex.Message), "WARN");
+                        Thread.Sleep(delay);
+                        attempt++;
+                        continue;
+                    }
+
+                    ApiResponse<T> errorResponse2 = HandleWebException<T>(ex);
+                    onError(errorResponse2.Error);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    onError(new ApiError(ex.Message));
+                    return;
+                }
             }
         }
 
@@ -463,7 +598,7 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
-        /// 判断 WebException 是否应重试（429/5xx 状态码）
+        /// 判断 WebException 是否应重试（传输层错误 / 429 / 5xx）
         /// </summary>
         private bool ShouldRetry(WebException ex, int attempt)
         {
@@ -475,7 +610,20 @@ namespace NetFrameworkAISDK.Common
             var response = ex.Response as HttpWebResponse;
             if (response == null)
             {
-                return IsTransientException(ex);
+                // 无 HTTP 响应 = 纯传输层错误（连接关闭、发送失败、超时等），应重试
+                switch (ex.Status)
+                {
+                    case WebExceptionStatus.ConnectFailure:
+                    case WebExceptionStatus.SendFailure:
+                    case WebExceptionStatus.ConnectionClosed:
+                    case WebExceptionStatus.ReceiveFailure:
+                    case WebExceptionStatus.Timeout:
+                    case WebExceptionStatus.NameResolutionFailure:
+                    case WebExceptionStatus.KeepAliveFailure:
+                        return true;
+                    default:
+                        return IsTransientException(ex);
+                }
             }
 
             int statusCode = (int)response.StatusCode;
