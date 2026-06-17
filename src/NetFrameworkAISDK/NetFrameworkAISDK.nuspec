@@ -18,24 +18,27 @@
       - Built-in AI Agent with automated tool-calling loop
       - Streaming support via callbacks
       - MAF-style Skill Manager with progressive disclosure
-      - MCP (Model Control Protocol) client support
+      - MCP (Model Control Protocol) client with stdio transport
+      - BouncyCastle TLS 1.2 proxy for legacy Windows (XP compatible)
       - Multi-modal (text + image) content support
       - Structured JSON output with generic type support
       - Compatible with .NET Framework 4.0+ and .NET Standard 2.0 (no C# 6.0+ features)
     </description>
-    <summary>OpenAI &amp; Anthropic SDK for .NET Framework 4.0+ and .NET Standard 2.0 with AI Agent, tool calling, MCP client, and skill management.</summary>
-    <releaseNotes>https://github.com/NetFrameworkAI/NetFrameworkAI-SDK/releases</releaseNotes>
+    <summary>OpenAI &amp; Anthropic SDK for .NET Framework 4.0+ and .NET Standard 2.0 with AI Agent, MCP client, TLS proxy, and skill management.</summary>
+    <releaseNotes>https://github.com/lishuangquan1987/NetFrameworkAISDK/releases</releaseNotes>
     <copyright>Copyright © 2026</copyright>
     <language>en-US</language>
     <readme>README.nuget.md</readme>
-    <tags>openai anthropic ai agent sdk dotnet-framework-4.0 tool-call mcp skill-manager</tags>
+    <tags>openai anthropic ai agent sdk dotnet-framework-4.0 tool-call mcp tls-proxy bouncycastle skill-manager</tags>
     <dependencies>
       <dependency id="Newtonsoft.Json" version="13.0.1" />
+      <dependency id="BouncyCastle" version="1.8.9" />
     </dependencies>
   </metadata>
   <files>
     <file src="bin\Release\net40\NetFrameworkAISDK.dll" target="lib\net40\NetFrameworkAISDK.dll" />
     <file src="bin\Release\net40\NetFrameworkAISDK.xml" target="lib\net40\NetFrameworkAISDK.xml" />
+    <file src="bin\Release\net40\BouncyCastle.Crypto.dll" target="lib\net40\BouncyCastle.Crypto.dll" />
     <file src="bin\Release\netstandard2.0\NetFrameworkAISDK.dll" target="lib\netstandard2.0\NetFrameworkAISDK.dll" />
     <file src="bin\Release\netstandard2.0\NetFrameworkAISDK.xml" target="lib\netstandard2.0\NetFrameworkAISDK.xml" />
     <file src="README.nuget.md" target="README.nuget.md" />

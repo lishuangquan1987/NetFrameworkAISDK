@@ -50,7 +50,6 @@ while (true)
 {
     Console.WriteLine("请输入问题：");
     var question = Console.ReadLine();
-    if (string.IsNullOrEmpty(question)) break;
     var answer = agent.Run(question);
     if (answer.IsSuccess)
     {
