@@ -1,6 +1,6 @@
 ﻿# NetFrameworkAISDK
 
-> **面向 .NET Framework 4.0+ / .NET Standard 2.0 的 OpenAI & Anthropic SDK** — AI Agent、工具调用、结构化输出、MCP 客户端、技能管理。
+> **面向 .NET Framework 4.0+ / .NET Standard 2.0 的 OpenAI & Anthropic SDK** — AI Agent、工具调用、结构化输出、MCP 客户端、TLS 代理、技能管理。
 
 [![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.0+-5C2D91)](https://dotnet.microsoft.com/download/dotnet-framework)
 [![NuGet](https://img.shields.io/nuget/v/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
@@ -41,10 +41,10 @@ NetFrameworkAISDK 为传统的 .NET Framework 4.0+ 和 .NET Standard 2.0 项目�
 - **多模态** — 文本和图片内容支持（URL 和 base64），适用于 GPT-4o、Claude 3.5 Sonnet 等模型。
 - **工具调用** — 完整的函数/工具调用支持，通过方法签名自动生成 JSON Schema，强类型安全。
 - **流式响应** — 通过回调实时获取响应流。
-- **MCP 客户端** — 内置 Model Control Protocol 客户端，可连接 MCP 服务器并将其工具注入为原生 `AIFunction` 实例。
+- **MCP 客户端** — 内置 Model Control Protocol 客户端，通过 stdio 子进程连接 MCP 服务器，`CreateAIFunction()` / `ListAsAIFunctions()` 直接将 MCP 工具注入 Agent。
 - **技能管理器** — MAF 风格的渐进式技能披露。仅在 system prompt 中注入技能摘要，通过 `load_skill` 工具调用按需加载完整内容。
 - **内置 Agent 工具** — 文件读写、代码搜索、目录列举等工具开箱即用。
-- **.NET 4.0+ / .NET Standard 2.0** — 兼容 .NET Framework 4.0+ 和 .NET Standard 2.0，不使用 C# 6.0+ 特性。默认启用 TLS 1.2。
+- **.NET 4.0+ / .NET Standard 2.0** — 兼容 .NET Framework 4.0+ 和 .NET Standard 2.0，不使用 C# 6.0+ 特性。安全协议自动探测，XP 上自动启用 BouncyCastle TLS 1.2 代理。
 
 ---
 
@@ -256,19 +256,41 @@ var mcp = new McpClient();
 mcp.Connect("path/to/mcp-server.exe");
 mcp.Initialize();
 
-var tools = mcp.ListTools();
-var mcpFunctions = new List<AIFunction>();
+// 一行获取全部 AIFunction
+var functions = mcp.ListAsAIFunctions();
+// 或逐个转换
+var func = mcp.CreateAIFunction(toolInfo);
 
-foreach (var tool in tools.Result)
-{
-    mcpFunctions.Add(AIFunction.CreateFromMcpTool(
-        tool.Name, tool.Description, tool.InputSchema,
-        new Func<string, string>(args =>
-            mcp.CallTool(tool.Name, args).Result)));
-}
-
-var agent = new AIAgent(client, "gpt-4o", "...", mcpFunctions);
+var agent = new AIAgent(client, "gpt-4o", "...", functions.Result);
 ```
+
+支持 `python -m mcp_server`、`node server.js`、`codegraph serve --mcp` 等任意 stdio MCP 服务器。
+
+### 9. 思考模式（推理内容）
+
+DeepSeek-R1、Qwen3 等模型的 `reasoning_content` 通过 `onReasoning` 回调透传：
+
+```csharp
+// 非流式
+agent.Run("问题", onReasoning: thinking => Console.WriteLine("[思考] " + thinking));
+
+// 流式（逐 chunk 推送）
+agent.RunStreaming("问题",
+    onUpdate: chunk => Console.Write(chunk),
+    onError: err => Console.WriteLine(err.Message),
+    onReasoning: chunk => Console.Write("[思考] " + chunk));
+```
+
+### 10. TLS 代理（Windows XP 兼容）
+
+XP 系统上自动启用 BouncyCastle 纯 C# TLS 1.2 代理，无需 OS 补丁：
+
+```csharp
+// 诊断用：任意平台强制启用代理
+HttpClientBase.ForceTlsProxyForDiagnostics();
+```
+
+非 XP 系统零开销，代理仅在 TLS 1.2 不被 OS 支持时自动启动。
 
 ---
 

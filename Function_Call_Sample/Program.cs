@@ -27,12 +27,6 @@ var agent = new AIAgent(client, model, "你是一个专家，负责解答用户�
     AIFunctionFactory.Create(GetFileContent)
 });
 
-//var agent = new AIAgent(client, model, "你是一个专家，负责解答用户的提出的问题", new List<AIFunction>()
-//{
-//    AIFunctionFactory.Create(new Func<string,string[]>( GetAllFiles)),
-//    AIFunctionFactory.Create(new Func<string,string>( GetFileContent))
-//});
-
 while (true)
 {
     Console.WriteLine("请输入问题：");

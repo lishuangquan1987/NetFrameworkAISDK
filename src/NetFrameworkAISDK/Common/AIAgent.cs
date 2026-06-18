@@ -239,11 +239,12 @@ namespace NetFrameworkAISDK.Common
         /// FunctionName（函数名）、FunctionArguments（参数 JSON）、
         /// Result（执行结果）、ToolCallId（调用 ID）
         /// </param>
+        /// <param name="onReasoning">思考/推理内容回调（可选，如 DeepSeek-R1 的 reasoning_content）</param>
         /// <returns>包含最终 AI 回复或错误信息的响应</returns>
-        public ApiResponse<string> Run(string userMessage, Action<ToolCallEventArgs> onToolCall = null)
+        public ApiResponse<string> Run(string userMessage, Action<ToolCallEventArgs> onToolCall = null, Action<string> onReasoning = null)
         {
             AddUserMessage(userMessage, null);
-            return AgentLoop(onToolCall, MaxIterations);
+            return AgentLoop(onToolCall, MaxIterations, onReasoning);
         }
 
         /// <summary>
@@ -252,11 +253,12 @@ namespace NetFrameworkAISDK.Common
         /// <param name="userMessage">用户文本消息</param>
         /// <param name="contentParts">多模态内容块列表（图片等），可为 null</param>
         /// <param name="onToolCall">工具调用回调（可选）</param>
+        /// <param name="onReasoning">思考/推理内容回调（可选，如 DeepSeek-R1 的 reasoning_content）</param>
         /// <returns>包含最终 AI 回复或错误信息的响应</returns>
-        public ApiResponse<string> Run(string userMessage, List<MessageContent> contentParts, Action<ToolCallEventArgs> onToolCall = null)
+        public ApiResponse<string> Run(string userMessage, List<MessageContent> contentParts, Action<ToolCallEventArgs> onToolCall = null, Action<string> onReasoning = null)
         {
             AddUserMessage(userMessage, contentParts);
-            return AgentLoop(onToolCall, MaxIterations);
+            return AgentLoop(onToolCall, MaxIterations, onReasoning);
         }
 
         /// <summary>
@@ -373,7 +375,7 @@ namespace NetFrameworkAISDK.Common
         /// <summary>
         /// 工具调用内部循环。持续调用模型直到无工具调用或达到最大迭代次数
         /// </summary>
-        private ApiResponse<string> AgentLoop(Action<ToolCallEventArgs> onToolCall, int remainingIterations)
+        private ApiResponse<string> AgentLoop(Action<ToolCallEventArgs> onToolCall, int remainingIterations, Action<string> onReasoning = null)
         {
             if (remainingIterations <= 0)
             {
@@ -406,6 +408,12 @@ namespace NetFrameworkAISDK.Common
                 Content = result.Content != null ? result.Content : "",
                 ReasoningContent = result.ReasoningContent
             };
+
+            // 通知思考内容
+            if (onReasoning != null && !string.IsNullOrEmpty(result.ReasoningContent))
+            {
+                onReasoning(result.ReasoningContent);
+            }
 
             bool hasToolCalls = result.ToolCalls != null && result.ToolCalls.Count > 0;
 
@@ -441,7 +449,7 @@ namespace NetFrameworkAISDK.Common
 
             ExecuteToolCalls(result.ToolCalls, onToolCall);
 
-            return AgentLoop(onToolCall, remainingIterations - 1);
+            return AgentLoop(onToolCall, remainingIterations - 1, onReasoning);
         }
 
         /// <summary>
@@ -451,14 +459,16 @@ namespace NetFrameworkAISDK.Common
         /// <param name="onUpdate">每收到一个文本块时回调（增量文本）</param>
         /// <param name="onError">发生错误时回调</param>
         /// <param name="onToolCall">工具调用回调（可选）</param>
+        /// <param name="onReasoning">思考/推理内容回调（可选，如 DeepSeek-R1 的 reasoning_content）</param>
         public void RunStreaming(
             string userMessage,
             Action<string> onUpdate,
             Action<ApiError> onError,
-            Action<ToolCallEventArgs> onToolCall = null)
+            Action<ToolCallEventArgs> onToolCall = null,
+            Action<string> onReasoning = null)
         {
             AddUserMessage(userMessage, null);
-            StreamingLoop(onUpdate, onError, onToolCall, MaxIterations);
+            StreamingLoop(onUpdate, onError, onToolCall, MaxIterations, onReasoning);
         }
 
         /// <summary>
@@ -469,15 +479,17 @@ namespace NetFrameworkAISDK.Common
         /// <param name="onUpdate">每收到一个文本块时回调（增量文本）</param>
         /// <param name="onError">发生错误时回调</param>
         /// <param name="onToolCall">工具调用回调（可选）</param>
+        /// <param name="onReasoning">思考/推理内容回调（可选，如 DeepSeek-R1 的 reasoning_content）</param>
         public void RunStreaming(
             string userMessage,
             List<MessageContent> contentParts,
             Action<string> onUpdate,
             Action<ApiError> onError,
-            Action<ToolCallEventArgs> onToolCall = null)
+            Action<ToolCallEventArgs> onToolCall = null,
+            Action<string> onReasoning = null)
         {
             AddUserMessage(userMessage, contentParts);
-            StreamingLoop(onUpdate, onError, onToolCall, MaxIterations);
+            StreamingLoop(onUpdate, onError, onToolCall, MaxIterations, onReasoning);
         }
 
         /// <summary>
@@ -488,7 +500,8 @@ namespace NetFrameworkAISDK.Common
             Action<string> onUpdate,
             Action<ApiError> onError,
             Action<ToolCallEventArgs> onToolCall,
-            int remainingIterations)
+            int remainingIterations,
+            Action<string> onReasoning = null)
         {
             if (remainingIterations <= 0)
             {
@@ -519,6 +532,7 @@ namespace NetFrameworkAISDK.Common
                     if (!string.IsNullOrEmpty(chunk.ReasoningContent))
                     {
                         fullReasoning += chunk.ReasoningContent;
+                        if (onReasoning != null) onReasoning(chunk.ReasoningContent);
                     }
 
                     if (!string.IsNullOrEmpty(chunk.Content))
@@ -655,7 +669,7 @@ namespace NetFrameworkAISDK.Common
                 }
             }
 
-            StreamingLoop(onUpdate, onError, onToolCall, remainingIterations - 1);
+            StreamingLoop(onUpdate, onError, onToolCall, remainingIterations - 1, onReasoning);
         }
 
         /// <summary>

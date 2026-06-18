@@ -11,9 +11,7 @@ var client = new OpenAIClient(apiKey, url);
 var agent = new AIAgent(client, model, "你是一个信息提取助手，能够根据用户输入的内容智能提取关键字并填充到指定的json", null);
 
 var result = agent.RunStructured<PersonInfo>(
-    "张宇，男，1994 年 5 月出生，现居上海，手机号 138-1234-5678，邮箱 zhangyu@email.com。");
-Console.WriteLine(result.Result);
-
+    "张宇，男，1994 年 5 月出生，现居上海，手机号 138-1234-5678，邮箱是zhangyu@email.com。");
 
 if (result.IsSuccess)
 {

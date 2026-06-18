@@ -1,6 +1,6 @@
 # NetFrameworkAISDK SDK
 
-**OpenAI & Anthropic SDK for .NET Framework 4.0+ / .NET Standard 2.0** — AI Agent, tool calling, structured output, MCP client, skill management.
+**OpenAI & Anthropic SDK for .NET Framework 4.0+ / .NET Standard 2.0** — AI Agent, tool calling, structured output, MCP client, TLS proxy, skill management.
 
 [![NuGet](https://img.shields.io/nuget/v/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/NetFrameworkAISDK)](https://www.nuget.org/packages/NetFrameworkAISDK)
@@ -112,7 +112,26 @@ var agent = AIAgent.CreateWithDefaults(
 var mcp = new McpClient();
 mcp.Connect("path/to/mcp-server.exe");
 mcp.Initialize();
-// Inject MCP tools as AIFunction instances into the Agent
+
+// 一行注入全部 MCP 工具
+var functions = mcp.ListAsAIFunctions();
+var agent = new AIAgent(client, "gpt-4o", "...", functions.Result);
+```
+
+### Thinking / Reasoning Content
+
+```csharp
+agent.RunStreaming("Explain relativity",
+    onUpdate: chunk => Console.Write(chunk),
+    onError: err => Console.WriteLine(err.Message),
+    onReasoning: thinking => Console.Write("[think] " + thinking));
+```
+
+### TLS Proxy (Windows XP compatible)
+
+```csharp
+// XP 自动启用，非 XP 诊断用强制：
+HttpClientBase.ForceTlsProxyForDiagnostics();
 ```
 
 ***
@@ -129,4 +148,5 @@ mcp.Initialize();
 
 - .NET Framework 4.0 or later, or .NET Standard 2.0 compatible runtime (e.g. .NET Core 2.0+)
 - Newtonsoft.Json 13.0.1 (auto-restored)
+- BouncyCastle 1.8.9 (auto-restored, used for TLS 1.2 proxy on legacy Windows)
 

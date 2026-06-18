@@ -23,10 +23,10 @@ new JsonSerializerSettings {
 };
 `
 
-## TLS 1.2 配置
-`csharp
-ServicePointManager.SecurityProtocol = (SecurityProtocolType)(3072 | 768 | 192);
-`
+## TLS 1.2 + 代理配置
+SDK 自动探测 OS 支持的协议（Tls12 → Tls11 → Tls10 → Ssl3），逐级降级。
+Windows XP 上自动启动 BouncyCastle 纯 C# TLS 1.2 代理，无需手动设置 SecurityProtocol。
+诊断用强制代理：`HttpClientBase.ForceTlsProxyForDiagnostics()`。
 
 ## 工具调用 Agent 流程
 检查 assistantMessage.ToolCalls != null && assistantMessage.ToolCalls.Count > 0
