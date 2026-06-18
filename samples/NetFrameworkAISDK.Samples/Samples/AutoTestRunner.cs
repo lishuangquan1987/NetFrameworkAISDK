@@ -66,6 +66,7 @@ namespace NetFrameworkAISDK.Samples
             RunTest("6. RunStructured<PersonInfo> 结构化输出", Test6_StructuredOutput);
             RunTest("7. 流式+工具调用", Test7_StreamingWithTools);
             RunTest("8. 多模态图片输入 (base64)", Test8_MultimodalImage);
+            RunTest("9. RunStructured + 工具调用", Test9_StructuredWithTools);
 
             // 汇总
             Console.WriteLine("\n============================================================");
@@ -438,6 +439,48 @@ namespace NetFrameworkAISDK.Samples
         }
 
         // ============================================================
+        // 场景 9: RunStructured + 工具调用 → 验证结构化输出支持工具链
+        // ============================================================
+        private void Test9_StructuredWithTools()
+        {
+            // 定义结构化输出类型
+            // 注意：Newtonsoft.Json 需要无参构造函数，使用 public get/set 属性
+
+            var getStock = AIFunctionFactory.Create(
+                new Func<string, string>(GetStockInfo));
+
+            var agent = new AIAgent(_client, TestModel,
+                "You are a financial assistant. Use GetStockInfo to find data, then return structured JSON.",
+                new[] { getStock });
+            agent.MaxIterations = 5;
+
+            int toolCallCount = 0;
+            Console.WriteLine();
+            var result = agent.RunStructured<StockReport>(
+                "What is the stock price of Apple (AAPL)? Return as a StockReport.",
+                onToolCall: delegate (ToolCallEventArgs e)
+                {
+                    toolCallCount++;
+                    Console.Write("[tool:" + e.FunctionName + "]");
+                });
+
+            if (result.IsSuccess && result.Result != null)
+            {
+                var r = result.Result;
+                bool hasSymbol = !string.IsNullOrEmpty(r.Symbol) && r.Symbol.Contains("AAPL");
+                bool hasPrice = r.Price > 0;
+                _passed++;
+                Console.WriteLine(" PASS — tool_calls:" + toolCallCount + " symbol:" + hasSymbol + " price:" + hasPrice + " (" + r.Price + ")");
+                Console.WriteLine("      响应: " + r.Symbol + " " + r.Price + " " + r.Currency);
+            }
+            else
+            {
+                _failed++;
+                Console.WriteLine(" FAIL — " + (result.Error != null ? result.Error.Message : "空结果") + ", tool_calls:" + toolCallCount);
+            }
+        }
+
+        // ============================================================
         // 工具函数定义
         // ============================================================
 
@@ -518,6 +561,31 @@ namespace NetFrameworkAISDK.Samples
             var body = parts.Length > 1 ? parts[1] : content;
 
             return "Email sent successfully!\n  To: " + to + "\n  Subject: " + subject + "\n  Body: " + body;
+        }
+
+        // ============================================================
+        // 场景 9 类型 + 工具
+        // ============================================================
+        public class StockReport
+        {
+            public string Symbol { get; set; }
+            public double Price { get; set; }
+            public string Currency { get; set; }
+        }
+
+        [Description("Get stock price information for a given ticker symbol")]
+        static string GetStockInfo(
+            [Description("Stock ticker symbol, e.g., AAPL, GOOGL")]
+            string symbol)
+        {
+            var stocks = new Dictionary<string, string>
+            {
+                { "AAPL", "Apple Inc. (AAPL) — $178.50 USD" },
+                { "GOOGL", "Alphabet Inc. (GOOGL) — $142.30 USD" },
+                { "MSFT", "Microsoft Corp. (MSFT) — $420.10 USD" }
+            };
+            string key = symbol.ToUpper().Trim();
+            return stocks.ContainsKey(key) ? stocks[key] : symbol + " — $100.00 USD";
         }
 
         // ============================================================

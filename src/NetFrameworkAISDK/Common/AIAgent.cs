@@ -177,6 +177,31 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
+        /// 批量添加历史对话消息（恢复上下文、预填充多轮对话等）
+        /// </summary>
+        /// <param name="messages">要添加的 ConversationMessage 列表</param>
+        public void AddHistorys(IEnumerable<ConversationMessage> messages)
+        {
+            if (messages == null) return;
+            lock (_historyLock)
+            {
+                foreach (var msg in messages)
+                {
+                    if (msg != null)
+                    {
+                        _conversationHistory.Add(msg);
+                    }
+                }
+                // 裁剪超出限制
+                if (MaxHistoryMessages > 0 && _conversationHistory.Count > MaxHistoryMessages)
+                {
+                    int removeCount = _conversationHistory.Count - MaxHistoryMessages;
+                    _conversationHistory.RemoveRange(0, removeCount);
+                }
+            }
+        }
+
+        /// <summary>
         /// 动态添加工具函数
         /// </summary>
         /// <param name="function">要添加的 AI 函数</param>
@@ -267,21 +292,18 @@ namespace NetFrameworkAISDK.Common
         /// <typeparam name="T">期望的输出类型（需有公开无参构造函数）</typeparam>
         /// <param name="userMessage">用户消息</param>
         /// <param name="onToolCall">工具调用回调（可选）</param>
+        /// <param name="onReasoning">思考/推理内容回调（可选）</param>
         /// <returns>包含反序列化对象或错误信息的响应</returns>
-        public ApiResponse<T> RunStructured<T>(string userMessage, Action<ToolCallEventArgs> onToolCall = null)
+        public ApiResponse<T> RunStructured<T>(string userMessage, Action<ToolCallEventArgs> onToolCall = null, Action<string> onReasoning = null)
         {
-            // 验证类型约束：T 必须有公共无参构造函数或者是值类型
+            // 验证：不能是抽象类或接口（无法 new T()）
             var type = typeof(T);
-            if (type.IsClass && !type.IsAbstract)
+            if (type.IsAbstract || type.IsInterface)
             {
-                var constructor = type.GetConstructor(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance, null, System.Type.EmptyTypes, null);
-                if (constructor == null)
+                return new ApiResponse<T>
                 {
-                    return new ApiResponse<T>
-                    {
-                        Error = new ApiError { Message = "Type " + type.Name + " must have a public parameterless constructor for structured output." }
-                    };
-                }
+                    Error = new ApiError { Message = "Type " + type.Name + " cannot be abstract or an interface for structured output." }
+                };
             }
 
             var schemaName = type.Name;
@@ -295,7 +317,7 @@ namespace NetFrameworkAISDK.Common
                 Strict = true
             };
 
-            var response = Run(userMessage, onToolCall);
+            var response = Run(userMessage, onToolCall, onReasoning);
 
             // 如果 json_schema 不被支持（如 DeepSeek），回退到 json_object
             if (!response.IsSuccess && response.Error != null
@@ -313,7 +335,7 @@ namespace NetFrameworkAISDK.Common
                     + "DO NOT include explanations, only output the JSON.\n"
                     + "Required JSON schema:\n" + jsonSchema;
 
-                response = Run(userMessage, onToolCall);
+                response = Run(userMessage, onToolCall, onReasoning);
             }
 
             _options.ResponseFormat = null;
