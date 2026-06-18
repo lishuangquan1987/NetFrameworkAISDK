@@ -50,47 +50,31 @@ namespace NetFrameworkAISDK.Samples
                 Console.WriteLine("FAIL: " + connectResult.Error.Message);
                 return null;
             }
-            Console.WriteLine("Connected.");
+            Console.WriteLine("Connected and initialized.");
 
-            Console.Write("Initializing... ");
-            var initResult = mcpClient.Initialize();
-            if (!initResult.IsSuccess)
-            {
-                Console.WriteLine("\nError: " + initResult.Error.Message);
-                mcpClient.Dispose();
-                return null;
-            }
-            Console.WriteLine("Done.");
-
-            Console.WriteLine("\nStep 2: Discover MCP Tools");
+            Console.WriteLine("\nStep 2: Discover MCP Tools (ListAsAIFunctions)");
             Console.WriteLine("----------------------------------------------------------------");
-            var toolsResult = mcpClient.ListTools();
-            if (!toolsResult.IsSuccess)
+            var functionsResult = mcpClient.ListAsAIFunctions();
+            if (!functionsResult.IsSuccess)
             {
-                Console.WriteLine("Error listing tools: " + toolsResult.Error.Message);
+                Console.WriteLine("Error: " + functionsResult.Error.Message);
                 mcpClient.Dispose();
                 return null;
             }
 
-            var mcpTools = toolsResult.Result;
-            if (mcpTools == null || mcpTools.Count == 0)
+            var mcpFunctions = functionsResult.Result;
+            if (mcpFunctions == null || mcpFunctions.Count == 0)
             {
-                Console.WriteLine("No tools discovered from MCP server.");
+                Console.WriteLine("No tools discovered.");
                 mcpClient.Dispose();
                 return null;
             }
 
-            Console.WriteLine("Discovered " + mcpTools.Count + " tool(s):");
-            var mcpFunctions = new List<AIFunction>();
-            foreach (var tool in mcpTools)
+            Console.WriteLine("Discovered " + mcpFunctions.Count + " tool(s):");
+            foreach (var f in mcpFunctions)
             {
-                Console.WriteLine("\n  - " + tool.Name + ": " + (tool.Description ?? "(no description)"));
-                mcpFunctions.Add(mcpClient.CreateAIFunction(tool));
+                Console.WriteLine("  - " + f.Name + ": " + (f.Description != null ? f.Description.Substring(0, Math.Min(f.Description.Length, 80)) : "(no description)"));
             }
-
-            Console.WriteLine("\nStep 3: Test MCP Tools Directly");
-            Console.WriteLine("----------------------------------------------------------------");
-            TestMcpToolsDirectly(mcpClient, mcpTools);
 
             // AIAgent 交互测试
             if (runAgentTest)
@@ -105,33 +89,11 @@ namespace NetFrameworkAISDK.Samples
                 return mcpFunctions;
             }
 
-            Console.WriteLine("\nStep 4: Cleanup");
+            Console.WriteLine("\nStep 3: Cleanup");
             Console.WriteLine("----------------------------------------------------------------");
-            mcpClient.Shutdown();
             mcpClient.Dispose();
             Console.WriteLine("MCP server disconnected.");
             return mcpFunctions;
-        }
-
-        private void TestMcpToolsDirectly(McpClient mcpClient, List<McpToolInfo> mcpTools)
-        {
-            Console.WriteLine("\nDirect tool call test:");
-            Console.WriteLine("----------------------------------------------------------------");
-            Console.WriteLine("MCP tools are available. You can now test them by calling tools/call.");
-
-            foreach (var tool in mcpTools)
-            {
-                Console.Write("\nCalling tool '" + tool.Name + "'... ");
-                var result = mcpClient.CallTool(tool.Name, new Dictionary<string, object>());
-                if (result.IsSuccess)
-                {
-                    Console.WriteLine("Result: " + result.Result);
-                }
-                else
-                {
-                    Console.WriteLine("Error: " + result.Error.Message);
-                }
-            }
         }
 
         private void RunAIAgentAutoTest(List<AIFunction> mcpFunctions)

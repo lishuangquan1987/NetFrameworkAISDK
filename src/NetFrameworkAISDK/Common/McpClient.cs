@@ -8,8 +8,8 @@ using System.Threading;
 namespace NetFrameworkAISDK.Common
 {
     /// <summary>
-    /// MCP（Model Control Protocol）客户端，通过子进程标准输入输出与 MCP 服务器通信。
-    /// 支持工具发现（tools/list）、工具调用（tools/call）及初始化和关闭握手。
+    /// MCP 客户端，通过子进程标准输入输出与 MCP 服务器通信。
+    /// 一行连接并获取 AI 可用工具：Connect → ListAsAIFunctions。
     /// </summary>
     public class McpClient : IDisposable
     {
@@ -35,7 +35,6 @@ namespace NetFrameworkAISDK.Common
         /// <summary>
         /// 创建 MCP 客户端并指定超时时间
         /// </summary>
-        /// <param name="timeoutMilliseconds">请求超时毫秒数</param>
         public McpClient(int timeoutMilliseconds)
             : this(timeoutMilliseconds, null)
         {
@@ -44,8 +43,6 @@ namespace NetFrameworkAISDK.Common
         /// <summary>
         /// 创建 MCP 客户端并指定超时时间和日志记录器
         /// </summary>
-        /// <param name="timeoutMilliseconds">请求超时毫秒数</param>
-        /// <param name="logger">日志记录器（可选）</param>
         public McpClient(int timeoutMilliseconds, ILogger logger)
         {
             _timeoutMilliseconds = timeoutMilliseconds;
@@ -53,38 +50,22 @@ namespace NetFrameworkAISDK.Common
             _logger = logger ?? new ConsoleLogger();
         }
 
-        /// <summary>
-        /// 是否已连接到 MCP 服务器进程
-        /// </summary>
+        /// <summary>是否已连接到 MCP 服务器</summary>
         public bool IsConnected
         {
             get { return _process != null && !_process.HasExited; }
         }
 
         /// <summary>
-        /// 是否已完成初始化握手
+        /// 启动 MCP 服务器子进程并完成初始化握手
         /// </summary>
-        public bool IsInitialized
-        {
-            get { return _initialized; }
-        }
-
-        /// <summary>
-        /// 启动 MCP 服务器子进程并建立通信管道
-        /// </summary>
-        /// <param name="serverPath">MCP 服务器可执行文件路径</param>
+        /// <param name="serverPath">可执行文件路径（支持 PATH 查找）</param>
         /// <param name="arguments">命令行参数（可选）</param>
         /// <returns>连接结果</returns>
         public ApiResponse<bool> Connect(string serverPath, string arguments = null)
         {
             try
             {
-                var path = serverPath;
-                if (!Path.IsPathRooted(serverPath))
-                {
-                    path=Path.GetFullPath(serverPath);
-                }
-
                 var psi = new ProcessStartInfo(serverPath, arguments ?? "")
                 {
                     RedirectStandardInput = true,
@@ -112,12 +93,38 @@ namespace NetFrameworkAISDK.Common
                 }
                 catch (InvalidOperationException)
                 {
-                    // 控制台程序无 GUI 消息循环，WaitForInputIdle 会抛此异常，忽略即可
+                    // 控制台程序无 GUI 消息循环，忽略
                 }
 
                 _stdin = new StreamWriter(_process.StandardInput.BaseStream, new UTF8Encoding(false));
                 _stdout = new StreamReader(_process.StandardOutput.BaseStream, Encoding.UTF8);
                 _requestId = 0;
+
+                // 自动执行初始化握手
+                var initResponse = SendRequest("initialize", new Dictionary<string, object>
+                {
+                    { "protocolVersion", "2025-03-26" },
+                    { "capabilities", new Dictionary<string, object>() },
+                    { "clientInfo", new Dictionary<string, object>
+                        {
+                            { "name", "NetFrameworkAI" },
+                            { "version", "1.0.0" }
+                        }
+                    }
+                });
+
+                if (!initResponse.IsSuccess)
+                {
+                    // 初始化失败，清理进程
+                    try { _process.Kill(); } catch { }
+                    try { _process.Dispose(); } catch { }
+                    _process = null;
+                    return new ApiResponse<bool> { Error = initResponse.Error };
+                }
+
+                // MCP 协议：收到 initialize 响应后必须发送 initialized 通知
+                SendNotification("notifications/initialized", new Dictionary<string, object>());
+                _initialized = true;
 
                 return new ApiResponse<bool> { Result = true };
             }
@@ -133,119 +140,91 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
-        /// 执行 MCP 初始化握手
+        /// 获取 MCP 工具列表并全部转换为 AIFunction，可直接注入 AIAgent
         /// </summary>
-        /// <returns>初始化结果</returns>
-        public ApiResponse<bool> Initialize()
+        public ApiResponse<List<AIFunction>> ListAsAIFunctions()
         {
-            if (!IsConnected)
+            var toolsResult = ListTools();
+            if (!toolsResult.IsSuccess)
+                return new ApiResponse<List<AIFunction>> { Error = toolsResult.Error };
+
+            var functions = new List<AIFunction>();
+            var client = this;
+            foreach (var tool in toolsResult.Result)
             {
-                return new ApiResponse<bool> { Error = new ApiError("MCP server not connected") };
+                var toolName = tool.Name; // 捕获循环变量
+                functions.Add(AIFunctionFactory.Create(
+                    tool.Name, tool.Description, tool.InputSchema,
+                    new Func<string, string>(args =>
+                    {
+                        var result = client.CallTool(toolName, args);
+                        return result.IsSuccess ? result.Result : "Error: " + result.Error.Message;
+                    })));
             }
-
-            try
-            {
-                var response = SendRequest("initialize", new Dictionary<string, object>
-                {
-                    { "protocolVersion", "2025-03-26" },
-                    { "capabilities", new Dictionary<string, object>() },
-                    { "clientInfo", new Dictionary<string, object>
-                        {
-                            { "name", "NetFrameworkAI" },
-                            { "version", "1.0.0" }
-                        }
-                    }
-                });
-
-                if (!response.IsSuccess)
-                {
-                    return new ApiResponse<bool> { Error = response.Error };
-                }
-
-                // MCP 协议要求：收到 initialize 响应后必须发送 initialized 通知
-                SendNotification("notifications/initialized", new Dictionary<string, object>());
-
-                _initialized = true;
-                return new ApiResponse<bool> { Result = true };
-            }
-            catch (Exception ex)
-            {
-                return new ApiResponse<bool> { Error = new ApiError("MCP initialize failed: " + ex.Message) };
-            }
+            return new ApiResponse<List<AIFunction>> { Result = functions };
         }
 
         /// <summary>
-        /// 获取 MCP 服务器提供的工具列表
+        /// 释放所有资源（关闭管道和进程）
         /// </summary>
-        /// <returns>工具信息列表</returns>
-        public ApiResponse<List<McpToolInfo>> ListTools()
+        public void Dispose()
         {
-            if (!_initialized)
-            {
-                return new ApiResponse<List<McpToolInfo>> { Error = new ApiError("MCP client not initialized") };
-            }
+            if (_disposed) return;
+            _disposed = true;
 
+            if (_initialized && IsConnected)
+            {
+                try { SendRequest("shutdown", new Dictionary<string, object>()); }
+                catch { }
+            }
+            _initialized = false;
+            _aborted = true;
+
+            if (_stdin != null) { try { _stdin.Close(); } catch { } }
+            if (_stdout != null) { try { _stdout.Close(); } catch { } }
+            if (_process != null)
+            {
+                try { if (!_process.HasExited) _process.Kill(); } catch { }
+                try { _process.Dispose(); } catch { }
+            }
+        }
+
+        // ============================================================
+        // 内部方法
+        // ============================================================
+
+        private ApiResponse<List<McpToolInfo>> ListTools()
+        {
             try
             {
                 var response = SendRequest("tools/list", new Dictionary<string, object>());
                 if (!response.IsSuccess)
-                {
                     return new ApiResponse<List<McpToolInfo>> { Error = response.Error };
-                }
 
                 var result = response.Result;
                 if (result == null)
-                {
-                    return new ApiResponse<List<McpToolInfo>>
-                    {
-                        Error = new ApiError("MCP list_tools returned null")
-                    };
-                }
+                    return new ApiResponse<List<McpToolInfo>> { Error = new ApiError("MCP list_tools returned null") };
 
                 var content = JsonHelper.Serialize(result);
                 var toolsResult = JsonHelper.Deserialize<McpListToolsResult>(content);
                 var tools = new List<McpToolInfo>();
-
                 if (toolsResult != null && toolsResult.Tools != null)
                 {
-                    foreach (var tool in toolsResult.Tools)
-                    {
-                        tools.Add(new McpToolInfo
-                        {
-                            Name = tool.Name,
-                            Description = tool.Description,
-                            InputSchema = tool.InputSchema
-                        });
-                    }
+                    foreach (var t in toolsResult.Tools)
+                        tools.Add(new McpToolInfo { Name = t.Name, Description = t.Description, InputSchema = t.InputSchema });
                 }
-
                 return new ApiResponse<List<McpToolInfo>> { Result = tools };
             }
             catch (Exception ex)
             {
-                return new ApiResponse<List<McpToolInfo>>
-                {
-                    Error = new ApiError("MCP list_tools failed: " + ex.Message)
-                };
+                return new ApiResponse<List<McpToolInfo>> { Error = new ApiError("MCP list_tools failed: " + ex.Message) };
             }
         }
 
-        /// <summary>
-        /// 调用 MCP 服务器工具
-        /// </summary>
-        /// <param name="toolName">工具名称</param>
-        /// <param name="arguments">参数对象</param>
-        /// <returns>工具执行结果（JSON 字符串）</returns>
-        public ApiResponse<string> CallTool(string toolName, object arguments)
+        private ApiResponse<string> CallTool(string toolName, object arguments)
         {
-            if (!_initialized)
-            {
-                return new ApiResponse<string> { Error = new ApiError("MCP client not initialized") };
-            }
-
             try
             {
-                // 若 arguments 是 JSON 字符串，反序列化为对象（AI model 传来的是 string）
                 object parsedArgs = arguments;
                 if (arguments is string && !string.IsNullOrEmpty((string)arguments))
                 {
@@ -259,17 +238,10 @@ namespace NetFrameworkAISDK.Common
                 });
 
                 if (!response.IsSuccess)
-                {
                     return new ApiResponse<string> { Error = response.Error };
-                }
 
                 var result = response.Result;
-                if (result == null)
-                {
-                    return new ApiResponse<string> { Result = "" };
-                }
-
-                return new ApiResponse<string> { Result = JsonHelper.Serialize(result) };
+                return new ApiResponse<string> { Result = result != null ? JsonHelper.Serialize(result) : "" };
             }
             catch (Exception ex)
             {
@@ -277,148 +249,13 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
-        /// <summary>
-        /// 将 MCP 工具转换为 AIFunction，自动绑定到本客户端实例
-        /// </summary>
-        /// <param name="toolInfo">MCP 工具信息</param>
-        /// <returns>可注入 AIAgent 的 AIFunction 实例</returns>
-        public AIFunction CreateAIFunction(McpToolInfo toolInfo)
-        {
-            var client = this;
-            return AIFunctionFactory.Create(toolInfo.Name, toolInfo.Description, toolInfo.InputSchema,
-                new Func<string, string>(args =>
-                {
-                    var result = client.CallTool(toolInfo.Name, args);
-                    return result.IsSuccess ? result.Result : "Error: " + result.Error.Message;
-                }));
-        }
-
-        /// <summary>
-        /// 获取工具列表并全部转换为 AIFunction
-        /// </summary>
-        public ApiResponse<List<AIFunction>> ListAsAIFunctions()
-        {
-            var toolsResult = ListTools();
-            if (!toolsResult.IsSuccess)
-                return new ApiResponse<List<AIFunction>> { Error = toolsResult.Error };
-
-            var functions = new List<AIFunction>();
-            foreach (var tool in toolsResult.Result)
-            {
-                functions.Add(CreateAIFunction(tool));
-            }
-            return new ApiResponse<List<AIFunction>> { Result = functions };
-        }
-
-        /// <summary>
-        /// 发送 MCP 关闭请求
-        /// </summary>
-        public void Shutdown()
-        {
-            if (_initialized && IsConnected)
-            {
-                try
-                {
-                    SendRequest("shutdown", new Dictionary<string, object>());
-                }
-                catch
-                {
-                }
-            }
-            _initialized = false;
-        }
-
-        /// <summary>
-        /// 释放所有资源（关闭管道和进程）
-        /// </summary>
-        public void Dispose()
-        {
-            if (!_disposed)
-            {
-                _disposed = true;
-                Shutdown();
-                _aborted = true;
-                if (_stdin != null) { try { _stdin.Close(); } catch { } }
-                if (_stdout != null) { try { _stdout.Close(); } catch { } }
-                if (_process != null)
-                {
-                    try
-                    {
-                        if (!_process.HasExited)
-                        {
-                            _process.Kill();
-                        }
-                    }
-                    catch { }
-                    try { _process.Dispose(); } catch { }
-                }
-            }
-        }
-
-        /// <summary>
-        /// 重置客户端状态，允许在超时后重新使用
-        /// </summary>
-        public void Reset()
-        {
-            _aborted = false;
-        }
-
-        /// <summary>
-        /// 从标准输出读取一行，带超时保护。
-        /// 使用独立线程 + 取消标志，避免线程泄漏问题。
-        /// </summary>
-        /// <param name="timeoutMs">超时毫秒数</param>
-        /// <returns>读取的行，超时返回 null</returns>
-        private string ReadLineWithTimeout(int timeoutMs)
-        {
-            if (_aborted)
-            {
-                return null;
-            }
-
-            string result = null;
-            Exception readEx = null;
-            var thread = new Thread(() =>
-            {
-                try
-                {
-                    result = _stdout.ReadLine();
-                }
-                catch (Exception ex)
-                {
-                    readEx = ex;
-                }
-            });
-            thread.IsBackground = true;
-            thread.Start();
-
-            if (thread.Join(timeoutMs))
-            {
-                if (readEx != null)
-                {
-                    _logger.Log("ReadLineWithTimeout read error: " + readEx.Message, "WARN");
-                }
-                return result;
-            }
-
-            // 超时：不强制 Abort（会损坏进程状态），仅标记取消并返回 null
-            return null;
-        }
-
-        /// <summary>
-        /// 发送 JSON-RPC 请求到 MCP 服务器（线程安全）
-        /// </summary>
-        /// <param name="method">JSON-RPC 方法名</param>
-        /// <param name="parameters">方法参数</param>
-        /// <returns>解析后的响应对象</returns>
         private ApiResponse<object> SendRequest(string method, object parameters)
         {
             lock (_sendLock)
             {
-                // 每次请求前重置状态
-                Reset();
-
+                _aborted = false;
                 _requestId++;
+
                 var request = new Dictionary<string, object>
                 {
                     { "jsonrpc", "2.0" },
@@ -428,7 +265,6 @@ namespace NetFrameworkAISDK.Common
                 };
 
                 string requestJson = JsonHelper.Serialize(request);
-
                 _logger.Log(string.Format("MCP sending request: method={0}, id={1}", method, _requestId), "DEBUG");
 
                 _stdin.WriteLine(requestJson);
@@ -439,10 +275,7 @@ namespace NetFrameworkAISDK.Common
                 {
                     string errorMsg = string.Format("MCP request timed out after {0}ms", _timeoutMilliseconds);
                     _logger.Log(errorMsg, "WARN");
-                    return new ApiResponse<object>
-                    {
-                        Error = new ApiError(errorMsg)
-                    };
+                    return new ApiResponse<object> { Error = new ApiError(errorMsg) };
                 }
 
                 var response = JsonHelper.Deserialize<McpJsonRpcResponse>(responseLine);
@@ -457,10 +290,7 @@ namespace NetFrameworkAISDK.Common
                 {
                     string errorMsg = response.Error.Message ?? "MCP request error";
                     _logger.Log(string.Format("MCP error: {0}", errorMsg), "ERROR");
-                    return new ApiResponse<object>
-                    {
-                        Error = new ApiError(errorMsg)
-                    };
+                    return new ApiResponse<object> { Error = new ApiError(errorMsg) };
                 }
 
                 _logger.Log("MCP request completed successfully", "DEBUG");
@@ -468,9 +298,29 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
-        /// <summary>
-        /// 发送 JSON-RPC 通知（无需响应，不计入 requestId）
-        /// </summary>
+        private string ReadLineWithTimeout(int timeoutMs)
+        {
+            if (_aborted) return null;
+
+            string result = null;
+            Exception readEx = null;
+            var thread = new Thread(() =>
+            {
+                try { result = _stdout.ReadLine(); }
+                catch (Exception ex) { readEx = ex; }
+            });
+            thread.IsBackground = true;
+            thread.Start();
+
+            if (thread.Join(timeoutMs))
+            {
+                if (readEx != null)
+                    _logger.Log("ReadLineWithTimeout read error: " + readEx.Message, "WARN");
+                return result;
+            }
+            return null;
+        }
+
         private void SendNotification(string method, object parameters)
         {
             var notification = new Dictionary<string, object>

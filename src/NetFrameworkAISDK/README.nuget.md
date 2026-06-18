@@ -110,11 +110,8 @@ var agent = AIAgent.CreateWithDefaults(
 
 ```csharp
 var mcp = new McpClient();
-mcp.Connect("path/to/mcp-server.exe");
-mcp.Initialize();
-
-// 一行注入全部 MCP 工具
-var functions = mcp.ListAsAIFunctions();
+mcp.Connect("path/to/mcp-server.exe");  // 自动初始化
+var functions = mcp.ListAsAIFunctions(); // 一行注入全部 MCP 工具
 var agent = new AIAgent(client, "gpt-4o", "...", functions.Result);
 ```
 

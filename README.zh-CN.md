@@ -253,14 +253,10 @@ var agent = new AIAgent(client, "gpt-4o", prompt, new[]
 
 ```csharp
 var mcp = new McpClient();
-mcp.Connect("path/to/mcp-server.exe");
-mcp.Initialize();
+mcp.Connect("path/to/mcp-server.exe");  // 自动完成初始化
 
 // 一行获取全部 AIFunction
 var functions = mcp.ListAsAIFunctions();
-// 或逐个转换
-var func = mcp.CreateAIFunction(toolInfo);
-
 var agent = new AIAgent(client, "gpt-4o", "...", functions.Result);
 ```
 
