@@ -592,6 +592,10 @@ namespace NetFrameworkAISDK.Common
             }
             catch (Exception ex)
             {
+                if (onError != null)
+                {
+                    onError(new ApiError("SSE parse error: " + ex.Message));
+                }
                 string truncated = eventData.Length > 100 ? eventData.Substring(0, 100) : eventData;
                 _logger.Log("SSE parse error: " + ex.Message + " | Data: " + truncated, "WARN");
             }
