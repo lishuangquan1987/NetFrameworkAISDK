@@ -61,7 +61,7 @@ namespace NetFrameworkAISDK.Common
 
         /// <summary>TLS 1.2 是否被 OS 支持</summary>
         private static bool _tls12Supported;
-        /// <summary>BouncyCastle 代理是否启用（XP 且不支持 TLS 1.2 时）</summary>
+        /// <summary>BouncyCastle 代理是否启用（TLS 1.2 不受支持或用户强制启用时）</summary>
         private static bool _proxyEnabled;
         /// <summary>代理监听端口</summary>
         private static int _proxyPort;
@@ -106,8 +106,8 @@ namespace NetFrameworkAISDK.Common
             ServicePointManager.Expect100Continue = false;
             _defaultLogger.Log("HttpClientBase: Configured DefaultConnectionLimit=50, Expect100Continue=false", "DEBUG");
 
-            // Windows XP 且 TLS 1.2 不被 OS 支持 → 启动 BouncyCastle 代理
-            if (!_tls12Supported && IsWindowsXP())
+            // TLS 1.2 不被 OS 支持 → 启动 BouncyCastle 代理
+            if (!_tls12Supported)
             {
                 try
                 {
@@ -123,16 +123,10 @@ namespace NetFrameworkAISDK.Common
             }
         }
 
-        /// <summary>检测是否为 Windows XP/Server 2003（版本号 5.x）</summary>
-        private static bool IsWindowsXP()
-        {
-            return Environment.OSVersion.Version.Major == 5;
-        }
-
         /// <summary>
         /// 【诊断用】强制启用 BouncyCastle TLS 代理，绕过 SChannel 直连。
         /// 在创建任何客户端之前调用；调用后所有 HTTPS 走本地代理。
-        /// 非 XP 系统仅用于测试代理功能，生产环境无需调用。
+        /// 无论 TLS 1.2 是否已成功配置，强制使用代理通道。
         /// </summary>
         public static void ForceTlsProxyForDiagnostics()
         {
