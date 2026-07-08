@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 
 namespace NetFrameworkAISDK.Common
 {
@@ -247,6 +248,33 @@ namespace NetFrameworkAISDK.Common
         }
 
         /// <summary>
+        /// 设置思考/推理模式开关。
+        /// </summary>
+        /// <param name="enable">true 开启，false 关闭，null 使用模型默认行为</param>
+        public void SetEnableThinking(bool? enable)
+        {
+            _options.EnableThinking = enable;
+        }
+
+        /// <summary>
+        /// 设置思考努力程度（仅 OpenAI 有效）。
+        /// </summary>
+        /// <param name="effort">可选值参见 <see cref="ThinkingEffort"/> 常量</param>
+        public void SetThinkingEffort(string effort)
+        {
+            _options.ThinkingEffort = effort;
+        }
+
+        /// <summary>
+        /// 设置思考预算 Token 数（仅 Anthropic 有效）。
+        /// </summary>
+        /// <param name="budgetTokens">预算 token 数，须 ≥ 1024；null 由 SDK 自动使用默认值</param>
+        public void SetThinkingBudgetTokens(int? budgetTokens)
+        {
+            _options.ThinkingBudgetTokens = budgetTokens;
+        }
+
+        /// <summary>
         /// 获取当前 SkillManager 实例，可用于运行时操作（AddDirectory、RemoveDirectory、Refresh 等）。
         /// 通过此属性直接操作 SkillManager，无需经过 AIAgent 包装方法。
         /// </summary>
@@ -265,11 +293,12 @@ namespace NetFrameworkAISDK.Common
         /// Result（执行结果）、ToolCallId（调用 ID）
         /// </param>
         /// <param name="onReasoning">思考/推理内容回调（可选，如 DeepSeek-R1 的 reasoning_content）</param>
+        /// <param name="cancellationToken">取消令牌（可选），在工具调用循环中各迭代前检查</param>
         /// <returns>包含最终 AI 回复或错误信息的响应</returns>
-        public ApiResponse<string> Run(string userMessage, Action<ToolCallEventArgs> onToolCall = null, Action<string> onReasoning = null)
+        public ApiResponse<string> Run(string userMessage, Action<ToolCallEventArgs> onToolCall = null, Action<string> onReasoning = null, CancellationToken? cancellationToken = null)
         {
             AddUserMessage(userMessage, null);
-            return AgentLoop(onToolCall, MaxIterations, onReasoning);
+            return AgentLoop(onToolCall, MaxIterations, onReasoning, cancellationToken);
         }
 
         /// <summary>
@@ -279,11 +308,12 @@ namespace NetFrameworkAISDK.Common
         /// <param name="contentParts">多模态内容块列表（图片等），可为 null</param>
         /// <param name="onToolCall">工具调用回调（可选）</param>
         /// <param name="onReasoning">思考/推理内容回调（可选，如 DeepSeek-R1 的 reasoning_content）</param>
+        /// <param name="cancellationToken">取消令牌（可选），在工具调用循环中各迭代前检查</param>
         /// <returns>包含最终 AI 回复或错误信息的响应</returns>
-        public ApiResponse<string> Run(string userMessage, List<MessageContent> contentParts, Action<ToolCallEventArgs> onToolCall = null, Action<string> onReasoning = null)
+        public ApiResponse<string> Run(string userMessage, List<MessageContent> contentParts, Action<ToolCallEventArgs> onToolCall = null, Action<string> onReasoning = null, CancellationToken? cancellationToken = null)
         {
             AddUserMessage(userMessage, contentParts);
-            return AgentLoop(onToolCall, MaxIterations, onReasoning);
+            return AgentLoop(onToolCall, MaxIterations, onReasoning, cancellationToken);
         }
 
         /// <summary>
@@ -397,7 +427,7 @@ namespace NetFrameworkAISDK.Common
         /// <summary>
         /// 工具调用内部循环。持续调用模型直到无工具调用或达到最大迭代次数
         /// </summary>
-        private ApiResponse<string> AgentLoop(Action<ToolCallEventArgs> onToolCall, int remainingIterations, Action<string> onReasoning = null)
+        private ApiResponse<string> AgentLoop(Action<ToolCallEventArgs> onToolCall, int remainingIterations, Action<string> onReasoning = null, CancellationToken? cancellationToken = null)
         {
             if (remainingIterations <= 0)
             {
@@ -416,7 +446,13 @@ namespace NetFrameworkAISDK.Common
             }
 
             _options.SystemPrompt = BuildSystemPrompt();
-            var response = _client.SendConversation(_conversationHistory, _options);
+
+            if (cancellationToken.HasValue && cancellationToken.Value.IsCancellationRequested)
+            {
+                return new ApiResponse<string> { Error = new ApiError("Request cancelled") };
+            }
+
+            var response = _client.SendConversation(_conversationHistory, _options, cancellationToken);
 
             if (!response.IsSuccess)
             {
@@ -471,7 +507,7 @@ namespace NetFrameworkAISDK.Common
 
             ExecuteToolCalls(result.ToolCalls, onToolCall);
 
-            return AgentLoop(onToolCall, remainingIterations - 1, onReasoning);
+            return AgentLoop(onToolCall, remainingIterations - 1, onReasoning, cancellationToken);
         }
 
         /// <summary>
@@ -482,15 +518,17 @@ namespace NetFrameworkAISDK.Common
         /// <param name="onError">发生错误时回调</param>
         /// <param name="onToolCall">工具调用回调（可选）</param>
         /// <param name="onReasoning">思考/推理内容回调（可选，如 DeepSeek-R1 的 reasoning_content）</param>
+        /// <param name="cancellationToken">取消令牌（可选），在工具调用循环中各迭代前检查</param>
         public void RunStreaming(
             string userMessage,
             Action<string> onUpdate,
             Action<ApiError> onError,
             Action<ToolCallEventArgs> onToolCall = null,
-            Action<string> onReasoning = null)
+            Action<string> onReasoning = null,
+            CancellationToken? cancellationToken = null)
         {
             AddUserMessage(userMessage, null);
-            StreamingLoop(onUpdate, onError, onToolCall, MaxIterations, onReasoning);
+            StreamingLoop(onUpdate, onError, onToolCall, MaxIterations, onReasoning, cancellationToken);
         }
 
         /// <summary>
@@ -502,16 +540,18 @@ namespace NetFrameworkAISDK.Common
         /// <param name="onError">发生错误时回调</param>
         /// <param name="onToolCall">工具调用回调（可选）</param>
         /// <param name="onReasoning">思考/推理内容回调（可选，如 DeepSeek-R1 的 reasoning_content）</param>
+        /// <param name="cancellationToken">取消令牌（可选），触发时中止请求</param>
         public void RunStreaming(
             string userMessage,
             List<MessageContent> contentParts,
             Action<string> onUpdate,
             Action<ApiError> onError,
             Action<ToolCallEventArgs> onToolCall = null,
-            Action<string> onReasoning = null)
+            Action<string> onReasoning = null,
+            CancellationToken? cancellationToken = null)
         {
             AddUserMessage(userMessage, contentParts);
-            StreamingLoop(onUpdate, onError, onToolCall, MaxIterations, onReasoning);
+            StreamingLoop(onUpdate, onError, onToolCall, MaxIterations, onReasoning, cancellationToken);
         }
 
         /// <summary>
@@ -523,7 +563,8 @@ namespace NetFrameworkAISDK.Common
             Action<ApiError> onError,
             Action<ToolCallEventArgs> onToolCall,
             int remainingIterations,
-            Action<string> onReasoning = null)
+            Action<string> onReasoning = null,
+            CancellationToken? cancellationToken = null)
         {
             if (remainingIterations <= 0)
             {
@@ -546,6 +587,14 @@ namespace NetFrameworkAISDK.Common
             bool hasError = false;
 
             _options.SystemPrompt = BuildSystemPrompt();
+
+            // 检查取消
+            if (cancellationToken.HasValue && cancellationToken.Value.IsCancellationRequested)
+            {
+                onError(new ApiError("Request cancelled"));
+                return;
+            }
+
             _client.SendConversationStreaming(
                 _conversationHistory,
                 _options,
@@ -575,7 +624,8 @@ namespace NetFrameworkAISDK.Common
                 {
                     hasError = true;
                     onError(error);
-                })
+                }),
+                cancellationToken
             );
 
             if (hasError)
@@ -691,7 +741,7 @@ namespace NetFrameworkAISDK.Common
                 }
             }
 
-            StreamingLoop(onUpdate, onError, onToolCall, remainingIterations - 1, onReasoning);
+            StreamingLoop(onUpdate, onError, onToolCall, remainingIterations - 1, onReasoning, cancellationToken);
         }
 
         /// <summary>

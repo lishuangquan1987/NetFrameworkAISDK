@@ -2,6 +2,7 @@ using NetFrameworkAISDK.Common;
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Threading;
 
 namespace NetFrameworkAISDK.OpenAI
 {
@@ -69,6 +70,8 @@ namespace NetFrameworkAISDK.OpenAI
         /// <param name="maxTokens">最大生成 token 数（可选）</param>
         /// <param name="tools">工具定义列表（可选）</param>
         /// <param name="responseFormat">响应格式（可选，用于结构化输出）</param>
+        /// <param name="reasoningEffort">推理努力程度（可选，"low"/"medium"/"high"）</param>
+        /// <param name="cancellationToken">取消令牌（可选）</param>
         /// <returns>包含聊天完成响应或错误的 ApiResponse</returns>
         private ApiResponse<ChatCompletionResponse> CreateChatCompletion(
             string model,
@@ -76,7 +79,9 @@ namespace NetFrameworkAISDK.OpenAI
             double? temperature = null,
             int? maxTokens = null,
             List<ToolDefinition> tools = null,
-            OpenAiResponseFormat responseFormat = null)
+            OpenAiResponseFormat responseFormat = null,
+            string reasoningEffort = null,
+            CancellationToken? cancellationToken = null)
         {
             var request = new ChatCompletionRequest
             {
@@ -86,10 +91,11 @@ namespace NetFrameworkAISDK.OpenAI
                 MaxTokens = maxTokens,
                 Tools = tools,
                 ResponseFormat = responseFormat,
+                ReasoningEffort = reasoningEffort,
                 Stream = false
             };
 
-            return Post<ChatCompletionResponse>("chat/completions", request);
+            return Post<ChatCompletionResponse>("chat/completions", request, cancellationToken);
         }
 
         /// <summary>
@@ -103,6 +109,8 @@ namespace NetFrameworkAISDK.OpenAI
         /// <param name="maxTokens">最大生成 token 数（可选）</param>
         /// <param name="tools">工具定义列表（可选）</param>
         /// <param name="responseFormat">响应格式（可选，用于结构化输出）</param>
+        /// <param name="reasoningEffort">推理努力程度（可选，"low"/"medium"/"high"）</param>
+        /// <param name="cancellationToken">取消令牌（可选）</param>
         private void CreateChatCompletionStream(
             string model,
             List<ChatMessage> messages,
@@ -111,7 +119,9 @@ namespace NetFrameworkAISDK.OpenAI
             double? temperature = null,
             int? maxTokens = null,
             List<ToolDefinition> tools = null,
-            OpenAiResponseFormat responseFormat = null)
+            OpenAiResponseFormat responseFormat = null,
+            string reasoningEffort = null,
+            CancellationToken? cancellationToken = null)
         {
             var request = new ChatCompletionRequest
             {
@@ -121,16 +131,18 @@ namespace NetFrameworkAISDK.OpenAI
                 MaxTokens = maxTokens,
                 Tools = tools,
                 ResponseFormat = responseFormat,
+                ReasoningEffort = reasoningEffort,
                 Stream = true
             };
 
-            PostStream("chat/completions", request, onData, onError);
+            PostStream("chat/completions", request, onData, onError, cancellationToken);
         }
 
         /// <inheritdoc />
         public override ApiResponse<ConversationResponse> SendConversation(
             List<ConversationMessage> messages,
-            ConversationOptions options)
+            ConversationOptions options,
+            CancellationToken? cancellationToken = null)
         {
             var openAiMessages = ConvertToOpenAiMessages(messages, options);
             var toolDefs = BuildToolDefinitions(options);
@@ -157,7 +169,8 @@ namespace NetFrameworkAISDK.OpenAI
 
             var response = CreateChatCompletion(
                 options.Model, openAiMessages, options.Temperature,
-                options.MaxTokens, toolDefs, responseFormat);
+                options.MaxTokens, toolDefs, responseFormat,
+                GetReasoningEffort(options), cancellationToken);
 
             if (!response.IsSuccess)
             {
@@ -175,7 +188,8 @@ namespace NetFrameworkAISDK.OpenAI
             List<ConversationMessage> messages,
             ConversationOptions options,
             Action<ConversationResponse> onChunk,
-            Action<ApiError> onError)
+            Action<ApiError> onError,
+            CancellationToken? cancellationToken = null)
         {
             var openAiMessages = ConvertToOpenAiMessages(messages, options);
             var toolDefs = BuildToolDefinitions(options);
@@ -250,7 +264,9 @@ namespace NetFrameworkAISDK.OpenAI
                 options.Temperature,
                 options.MaxTokens,
                 toolDefs,
-                responseFormat);
+                responseFormat,
+                GetReasoningEffort(options),
+                cancellationToken);
         }
 
         /// <summary>
@@ -408,6 +424,32 @@ namespace NetFrameworkAISDK.OpenAI
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 从 ConversationOptions 中推导推理努力程度参数。
+        /// EnableThinking=false 时不发送 reasoning_effort。
+        /// EnableThinking=true 或指定了 ThinkingEffort 时返回对应值。
+        /// EnableThinking 为 null 且未指定 ThinkingEffort 时返回 null（模型默认行为）。
+        /// </summary>
+        private static string GetReasoningEffort(ConversationOptions options)
+        {
+            if (options.EnableThinking == false)
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrEmpty(options.ThinkingEffort))
+            {
+                return options.ThinkingEffort;
+            }
+
+            if (options.EnableThinking == true)
+            {
+                return ThinkingEffort.Medium;
+            }
+
+            return null;
         }
     }
 }

@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Threading;
 
 namespace NetFrameworkAISDK.Anthropic
 {
@@ -60,6 +61,8 @@ namespace NetFrameworkAISDK.Anthropic
         /// <param name="system">系统提示（可选）</param>
         /// <param name="temperature">温度参数 0-1（可选）</param>
         /// <param name="tools">工具定义列表（可选）</param>
+        /// <param name="thinking">思考/扩展思考配置（可选）</param>
+        /// <param name="cancellationToken">取消令牌（可选）</param>
         /// <returns>包含消息响应或错误的 ApiResponse</returns>
         private ApiResponse<MessagesResponse> CreateMessage(
             string model,
@@ -67,7 +70,9 @@ namespace NetFrameworkAISDK.Anthropic
             int maxTokens,
             string system = null,
             double? temperature = null,
-            List<ToolDefinition> tools = null)
+            List<ToolDefinition> tools = null,
+            ThinkingBlock thinking = null,
+            CancellationToken? cancellationToken = null)
         {
             var request = new MessagesRequest
             {
@@ -77,10 +82,11 @@ namespace NetFrameworkAISDK.Anthropic
                 System = system,
                 Temperature = temperature,
                 Stream = false,
-                Tools = tools
+                Tools = tools,
+                Thinking = thinking
             };
 
-            return Post<MessagesResponse>("messages", request);
+            return Post<MessagesResponse>("messages", request, cancellationToken);
         }
 
         /// <summary>
@@ -94,6 +100,8 @@ namespace NetFrameworkAISDK.Anthropic
         /// <param name="system">系统提示（可选）</param>
         /// <param name="temperature">温度参数 0-1（可选）</param>
         /// <param name="tools">工具定义列表（可选）</param>
+        /// <param name="thinking">思考/扩展思考配置（可选）</param>
+        /// <param name="cancellationToken">取消令牌（可选）</param>
         private void CreateMessageStream(
             string model,
             List<AnthropicMessage> messages,
@@ -102,7 +110,9 @@ namespace NetFrameworkAISDK.Anthropic
             Action<ApiError> onError,
             string system = null,
             double? temperature = null,
-            List<ToolDefinition> tools = null)
+            List<ToolDefinition> tools = null,
+            ThinkingBlock thinking = null,
+            CancellationToken? cancellationToken = null)
         {
             var request = new MessagesRequest
             {
@@ -112,16 +122,18 @@ namespace NetFrameworkAISDK.Anthropic
                 System = system,
                 Temperature = temperature,
                 Stream = true,
-                Tools = tools
+                Tools = tools,
+                Thinking = thinking
             };
 
-            PostStream("messages", request, onEvent, onError);
+            PostStream("messages", request, onEvent, onError, cancellationToken);
         }
 
         /// <inheritdoc />
         public override ApiResponse<ConversationResponse> SendConversation(
             List<ConversationMessage> messages,
-            ConversationOptions options)
+            ConversationOptions options,
+            CancellationToken? cancellationToken = null)
         {
             var anthropicMessages = ConvertToAnthropicMessages(messages);
             var toolDefs = BuildToolDefinitions(options);
@@ -146,7 +158,9 @@ namespace NetFrameworkAISDK.Anthropic
                 maxTokens,
                 options.SystemPrompt,
                 options.Temperature,
-                toolDefs);
+                toolDefs,
+                BuildThinkingBlock(options),
+                cancellationToken);
 
             if (!response.IsSuccess)
             {
@@ -164,7 +178,8 @@ namespace NetFrameworkAISDK.Anthropic
             List<ConversationMessage> messages,
             ConversationOptions options,
             Action<ConversationResponse> onChunk,
-            Action<ApiError> onError)
+            Action<ApiError> onError,
+            CancellationToken? cancellationToken = null)
         {
             var anthropicMessages = ConvertToAnthropicMessages(messages);
             var toolDefs = BuildToolDefinitions(options);
@@ -235,6 +250,11 @@ namespace NetFrameworkAISDK.Anthropic
                         {
                             state.TextBuilder.Append(streamEvent.Delta.PartialJson);
                         }
+                        else if (state.Type == "thinking" && !string.IsNullOrEmpty(streamEvent.Delta.Thinking))
+                        {
+                            state.TextBuilder.Append(streamEvent.Delta.Thinking);
+                            convResp.ReasoningContent = streamEvent.Delta.Thinking;
+                        }
                     }
 
                     if (streamEvent.Type == StreamEventType.ContentBlockStop)
@@ -268,6 +288,10 @@ namespace NetFrameworkAISDK.Anthropic
                             {
                                 convResp.Content = null;
                             }
+                            else if (state.Type == "thinking")
+                            {
+                                convResp.ReasoningContent = null;
+                            }
                         }
                     }
 
@@ -282,7 +306,8 @@ namespace NetFrameworkAISDK.Anthropic
                         convResp.FinishReason = "end_turn";
                     }
 
-                    if (convResp.Content != null || convResp.ToolCalls != null)
+                    if (convResp.Content != null || convResp.ToolCalls != null
+                        || convResp.ReasoningContent != null)
                     {
                         onChunk(convResp);
                     }
@@ -290,7 +315,9 @@ namespace NetFrameworkAISDK.Anthropic
                 onError,
                 options.SystemPrompt,
                 options.Temperature,
-                toolDefs);
+                toolDefs,
+                BuildThinkingBlock(options),
+                cancellationToken);
         }
 
         /// <summary>
@@ -453,6 +480,11 @@ namespace NetFrameworkAISDK.Anthropic
                         textBuilder.Append(block.Text);
                     }
 
+                    if (block.Type == "thinking" && !string.IsNullOrEmpty(block.Thinking))
+                    {
+                        result.ReasoningContent = block.Thinking;
+                    }
+
                     if (block.Type == "tool_use")
                     {
                         if (block.Name == "__internal_structured_output")
@@ -509,6 +541,30 @@ namespace NetFrameworkAISDK.Anthropic
             };
 
             return toolDef;
+        }
+
+        /// <summary>
+        /// 从 ConversationOptions 构建 Anthropic thinking 配置。
+        /// EnableThinking=false 时返回 type="disabled" 禁止思考。
+        /// EnableThinking=true 或指定了 ThinkingBudgetTokens 时返回 type="enabled"。
+        /// EnableThinking 为 null 且未指定 budget 时返回 null（由模型默认行为决定）。
+        /// </summary>
+        private static ThinkingBlock BuildThinkingBlock(ConversationOptions options)
+        {
+            if (options.EnableThinking == false)
+            {
+                return new ThinkingBlock { Type = "disabled" };
+            }
+
+            if (options.EnableThinking == true || options.ThinkingBudgetTokens.HasValue)
+            {
+                int budgetTokens = options.ThinkingBudgetTokens.HasValue
+                    ? options.ThinkingBudgetTokens.Value
+                    : 1024;
+                return new ThinkingBlock { Type = "enabled", BudgetTokens = budgetTokens };
+            }
+
+            return null;
         }
     }
 }

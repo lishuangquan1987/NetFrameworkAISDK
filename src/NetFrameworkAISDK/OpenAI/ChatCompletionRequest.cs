@@ -42,5 +42,12 @@ namespace NetFrameworkAISDK.OpenAI
         /// 响应格式配置（结构化输出），为 null 时不启用
         /// </summary>
         public OpenAiResponseFormat ResponseFormat { get; set; }
+
+        /// <summary>
+        /// 推理努力程度（OpenAI o-series 模型支持）。
+        /// 可选值："low"、"medium"、"high"。
+        /// 为 null 时不发送该参数，模型使用默认行为。
+        /// </summary>
+        public string ReasoningEffort { get; set; }
     }
 }

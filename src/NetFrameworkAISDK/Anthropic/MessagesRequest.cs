@@ -42,5 +42,13 @@ namespace NetFrameworkAISDK.Anthropic
         /// 可用工具列表
         /// </summary>
         public List<ToolDefinition> Tools { get; set; }
+
+        /// <summary>
+        /// 思考/扩展思考配置。
+        /// 例如：new ThinkingBlock { Type = "enabled", BudgetTokens = 4000 }
+        /// 或   new ThinkingBlock { Type = "disabled" }
+        /// 为 null 时不发送该参数。
+        /// </summary>
+        public ThinkingBlock Thinking { get; set; }
     }
 }

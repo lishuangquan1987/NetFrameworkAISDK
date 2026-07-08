@@ -22,5 +22,8 @@ namespace NetFrameworkAISDK.Anthropic
 
         /// <summary>消息结束事件</summary>
         public const string MessageStop = "message_stop";
+
+        /// <summary>思考/推理增量事件</summary>
+        public const string ThinkingDelta = "thinking_delta";
     }
 }

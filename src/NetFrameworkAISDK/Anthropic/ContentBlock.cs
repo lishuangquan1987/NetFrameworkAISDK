@@ -65,5 +65,15 @@ namespace NetFrameworkAISDK.Anthropic
         /// 工具输入参数（tool_use 类型时使用）
         /// </summary>
         public object Input { get; set; }
+
+        /// <summary>
+        /// 思考/推理内容（thinking 类型内容块时使用）
+        /// </summary>
+        public string Thinking { get; set; }
+
+        /// <summary>
+        /// 思考签名（thinking 类型内容块时使用，需在下一次请求中原样传回）
+        /// </summary>
+        public string Signature { get; set; }
     }
 }

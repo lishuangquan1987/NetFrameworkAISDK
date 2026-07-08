@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace NetFrameworkAISDK.Common
 {
@@ -59,14 +60,16 @@ namespace NetFrameworkAISDK.Common
         /// <inheritdoc />
         public abstract ApiResponse<ConversationResponse> SendConversation(
             List<ConversationMessage> messages,
-            ConversationOptions options);
+            ConversationOptions options,
+            CancellationToken? cancellationToken = null);
 
         /// <inheritdoc />
         public abstract void SendConversationStreaming(
             List<ConversationMessage> messages,
             ConversationOptions options,
             Action<ConversationResponse> onChunk,
-            Action<ApiError> onError);
+            Action<ApiError> onError,
+            CancellationToken? cancellationToken = null);
 
         /// <inheritdoc />
         public virtual void ConfigureTools(IEnumerable<AIFunction> tools)

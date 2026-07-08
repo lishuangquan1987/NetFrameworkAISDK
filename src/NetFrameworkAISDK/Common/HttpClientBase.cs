@@ -252,9 +252,12 @@ namespace NetFrameworkAISDK.Common
         /// <summary>
         /// 发送 POST 请求
         /// </summary>
-        protected ApiResponse<T> Post<T>(string endpoint, object data)
+        /// <param name="endpoint">API 端点路径</param>
+        /// <param name="data">请求体数据（将序列化为 JSON）</param>
+        /// <param name="cancellationToken">取消令牌（可选），触发时中止请求</param>
+        protected ApiResponse<T> Post<T>(string endpoint, object data, CancellationToken? cancellationToken = null)
         {
-            return Request<T>("POST", endpoint, data);
+            return Request<T>("POST", endpoint, data, null, cancellationToken);
         }
 
         /// <summary>
@@ -279,6 +282,19 @@ namespace NetFrameworkAISDK.Common
         protected ApiResponse<T> Delete<T>(string endpoint, object queryParams)
         {
             return Request<T>("DELETE", endpoint, null, queryParams);
+        }
+
+        /// <summary>
+        /// 注册 CancellationToken 回调：触发时 Abort 该 HttpWebRequest
+        /// </summary>
+        private static CancellationTokenRegistration? AttachCancellationToken(HttpWebRequest request, CancellationToken? cancellationToken)
+        {
+            if (cancellationToken.HasValue)
+            {
+                var token = cancellationToken.Value;
+                return token.Register(new Action(request.Abort));
+            }
+            return null;
         }
 
         /// <summary>
@@ -354,15 +370,15 @@ namespace NetFrameworkAISDK.Common
         /// <summary>
         /// 执行 HTTP 请求（无查询参数入口）
         /// </summary>
-        private ApiResponse<T> Request<T>(string method, string endpoint, object data, object queryParams = null)
+        private ApiResponse<T> Request<T>(string method, string endpoint, object data, object queryParams = null, CancellationToken? cancellationToken = null)
         {
-            return RequestWithRetry<T>(method, endpoint, data, queryParams, 0);
+            return RequestWithRetry<T>(method, endpoint, data, queryParams, 0, cancellationToken);
         }
 
         /// <summary>
         /// 执行 HTTP 请求并支持重试
         /// </summary>
-        private ApiResponse<T> RequestWithRetry<T>(string method, string endpoint, object data, object queryParams, int attempt)
+        private ApiResponse<T> RequestWithRetry<T>(string method, string endpoint, object data, object queryParams, int attempt, CancellationToken? cancellationToken = null)
         {
             try
             {
@@ -389,34 +405,57 @@ namespace NetFrameworkAISDK.Common
                     ConfigureProxyRequest(request);
                 }
 
-                if (data != null && (method == "POST" || method == "PUT"))
+                // 注册取消回调：CancellationToken 触发时 Abort 请求
+                CancellationTokenRegistration? ctr = null;
+                if (cancellationToken.HasValue)
                 {
-                    string json = JsonHelper.Serialize(data);
-                    byte[] bytes = Encoding.UTF8.GetBytes(json);
-                    request.ContentLength = bytes.Length;
-                    using (Stream stream = request.GetRequestStream())
-                    {
-                        stream.Write(bytes, 0, bytes.Length);
-                    }
+                    ctr = cancellationToken.Value.Register(new Action(request.Abort));
                 }
 
-                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-                using (Stream stream = response.GetResponseStream())
-                using (StreamReader reader = new StreamReader(stream))
+                try
                 {
-                    string content = reader.ReadToEnd();
-                    T result = JsonHelper.Deserialize<T>(content);
-                    return new ApiResponse<T> { Result = result };
+                    if (data != null && (method == "POST" || method == "PUT"))
+                    {
+                        string json = JsonHelper.Serialize(data);
+                        byte[] bytes = Encoding.UTF8.GetBytes(json);
+                        request.ContentLength = bytes.Length;
+                        using (Stream stream = request.GetRequestStream())
+                        {
+                            stream.Write(bytes, 0, bytes.Length);
+                        }
+                    }
+
+                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                    using (Stream stream = response.GetResponseStream())
+                    using (StreamReader reader = new StreamReader(stream))
+                    {
+                        string content = reader.ReadToEnd();
+                        T result = JsonHelper.Deserialize<T>(content);
+                        return new ApiResponse<T> { Result = result };
+                    }
+                }
+                finally
+                {
+                    if (ctr.HasValue)
+                    {
+                        ctr.Value.Dispose();
+                    }
                 }
             }
             catch (WebException ex)
             {
+                // 取消导致的异常 → 不重试
+                if (ex.Status == WebExceptionStatus.RequestCanceled)
+                {
+                    return new ApiResponse<T> { Error = new ApiError("Request cancelled") };
+                }
+
                 if (ShouldRetry(ex, attempt))
                 {
                     int delay = RetryDelayMilliseconds * (int)Math.Pow(2, attempt);
                     _logger.Log(string.Format("WebException, retrying in {0}ms...", delay), "WARN");
                     Thread.Sleep(delay);
-                    return RequestWithRetry<T>(method, endpoint, data, queryParams, attempt + 1);
+                    return RequestWithRetry<T>(method, endpoint, data, queryParams, attempt + 1, cancellationToken);
                 }
                 _logger.Log(string.Format("WebException, not retrying: {0}", ex.Message), "ERROR");
                 return HandleWebException<T>(ex);
@@ -428,7 +467,7 @@ namespace NetFrameworkAISDK.Common
                     int delay = RetryDelayMilliseconds * (int)Math.Pow(2, attempt);
                     _logger.Log(string.Format("Transient exception, retrying in {0}ms: {1}", delay, ex.Message), "WARN");
                     Thread.Sleep(delay);
-                    return RequestWithRetry<T>(method, endpoint, data, queryParams, attempt + 1);
+                    return RequestWithRetry<T>(method, endpoint, data, queryParams, attempt + 1, cancellationToken);
                 }
                 _logger.Log(string.Format("Exception: {0}", ex.Message), "ERROR");
                 return new ApiResponse<T> { Error = new ApiError(ex.Message) };
@@ -443,7 +482,8 @@ namespace NetFrameworkAISDK.Common
         /// <param name="data">请求体数据</param>
         /// <param name="onData">每收到一个数据块时的回调</param>
         /// <param name="onError">发生错误时的回调</param>
-        protected void PostStream<T>(string endpoint, object data, Action<T> onData, Action<ApiError> onError)
+        /// <param name="cancellationToken">取消令牌（可选），触发时中止请求</param>
+        protected void PostStream<T>(string endpoint, object data, Action<T> onData, Action<ApiError> onError, CancellationToken? cancellationToken = null)
         {
             string url = BuildUrl(endpoint);
             string json = JsonHelper.Serialize(data);
@@ -466,25 +506,49 @@ namespace NetFrameworkAISDK.Common
                         ConfigureProxyRequest(request);
                     }
 
-                    using (Stream requestStream = request.GetRequestStream())
+                    // 注册取消回调
+                    CancellationTokenRegistration? ctr = null;
+                    if (cancellationToken.HasValue)
                     {
-                        requestStream.Write(bytes, 0, bytes.Length);
+                        ctr = cancellationToken.Value.Register(new Action(request.Abort));
                     }
 
-                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-                    using (Stream responseStream = response.GetResponseStream())
+                    try
                     {
-                        if (responseStream == null)
+                        using (Stream requestStream = request.GetRequestStream())
                         {
-                            onError(new ApiError("Empty response stream"));
+                            requestStream.Write(bytes, 0, bytes.Length);
+                        }
+
+                        using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                        using (Stream responseStream = response.GetResponseStream())
+                        {
+                            if (responseStream == null)
+                            {
+                                onError(new ApiError("Empty response stream"));
+                                return;
+                            }
+                            ParseSSEStream(responseStream, onData, onError);
                             return;
                         }
-                        ParseSSEStream(responseStream, onData, onError);
-                        return;
+                    }
+                    finally
+                    {
+                        if (ctr.HasValue)
+                        {
+                            ctr.Value.Dispose();
+                        }
                     }
                 }
                 catch (WebException ex)
                 {
+                    // 取消 → 不重试，直接通知
+                    if (ex.Status == WebExceptionStatus.RequestCanceled)
+                    {
+                        onError(new ApiError("Request cancelled"));
+                        return;
+                    }
+
                     // 已收到 HTTP 响应（非传输层错误）→ 不重试，直接返回
                     if (ex.Response != null)
                     {
@@ -608,6 +672,12 @@ namespace NetFrameworkAISDK.Common
             var response = ex.Response as HttpWebResponse;
             if (response == null)
             {
+                // RequestCanceled 不应重试
+                if (ex.Status == WebExceptionStatus.RequestCanceled)
+                {
+                    return false;
+                }
+
                 // 无 HTTP 响应 = 纯传输层错误（连接关闭、发送失败、超时等），应重试
                 switch (ex.Status)
                 {

@@ -29,5 +29,15 @@ namespace NetFrameworkAISDK.Anthropic
         /// 停止序列（message_delta 事件时使用）
         /// </summary>
         public string StopSequence { get; set; }
+
+        /// <summary>
+        /// 思考/推理增量文本（thinking_delta 类型时使用）
+        /// </summary>
+        public string Thinking { get; set; }
+
+        /// <summary>
+        /// 思考签名（thinking_delta 最后一块时填充）
+        /// </summary>
+        public string Signature { get; set; }
     }
 }
