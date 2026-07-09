@@ -248,6 +248,7 @@ namespace NetFrameworkAISDK.OpenAI
                                 {
                                     convResp.ToolCalls.Add(new ToolCallRequest
                                     {
+                                        Index = tc.Index,
                                         Id = tc.Id,
                                         Type = tc.Type,
                                         FunctionName = tc.Function != null ? tc.Function.Name : null,

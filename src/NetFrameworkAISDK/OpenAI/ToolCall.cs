@@ -6,6 +6,11 @@ namespace NetFrameworkAISDK.OpenAI
     public class ToolCall
     {
         /// <summary>
+        /// 工具调用在数组中的索引（流式 delta 块中用于匹配同一工具调用的不同分片）
+        /// </summary>
+        public int? Index { get; set; }
+
+        /// <summary>
         /// 工具调用唯一标识符
         /// </summary>
         public string Id { get; set; }

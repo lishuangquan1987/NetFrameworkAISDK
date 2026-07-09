@@ -659,87 +659,7 @@ namespace NetFrameworkAISDK.Common
                 return;
             }
 
-            foreach (var toolCall in collectedToolCalls)
-            {
-                string functionName = toolCall.FunctionName;
-                string functionArgs = !string.IsNullOrEmpty(toolCall.FunctionArguments) ? toolCall.FunctionArguments : "{}";
-
-                AIFunction function = null;
-                if (!string.IsNullOrEmpty(functionName) && _functionMap.ContainsKey(functionName))
-                {
-                    function = _functionMap[functionName];
-                }
-
-                if (function != null)
-                {
-                    bool needsApproval = function.RequiresApproval;
-                    if (function.ApprovalPredicate != null)
-                    {
-                        needsApproval = function.ApprovalPredicate(functionName, functionArgs);
-                    }
-
-                    if (needsApproval && ToolApproval != null)
-                    {
-                        var approvalArgs = new ToolCallEventArgs
-                        {
-                            FunctionName = functionName,
-                            FunctionArguments = functionArgs,
-                            ToolCallId = toolCall.Id,
-                            RequiresApproval = true
-                        };
-
-                        if (!ToolApproval(approvalArgs))
-                        {
-                            AddToHistory(new ConversationMessage
-                            {
-                                Role = MessageRole.Tool,
-                                Name = functionName,
-                                ToolCallId = toolCall.Id,
-                                Content = "[REJECTED] User denied execution of tool: " + functionName
-                            });
-
-                            if (onToolCall != null)
-                            {
-                                approvalArgs.Result = "[REJECTED]";
-                                approvalArgs.IsApproved = false;
-                                onToolCall(approvalArgs);
-                            }
-                            continue;
-                        }
-                    }
-
-                    var result = function.Execute(functionArgs);
-                    AddToHistory(new ConversationMessage
-                    {
-                        Role = MessageRole.Tool,
-                        Name = functionName,
-                        ToolCallId = toolCall.Id,
-                        Content = result
-                    });
-
-                    if (onToolCall != null)
-                    {
-                        onToolCall(new ToolCallEventArgs
-                        {
-                            FunctionName = functionName,
-                            FunctionArguments = functionArgs,
-                            Result = result,
-                            ToolCallId = toolCall.Id
-                        });
-                    }
-                }
-                else
-                {
-                    // 工具未注册或无函数名：添加错误结果，确保对话历史完整
-                    AddToHistory(new ConversationMessage
-                    {
-                        Role = MessageRole.Tool,
-                        Name = !string.IsNullOrEmpty(functionName) ? functionName : "unknown",
-                        ToolCallId = toolCall.Id,
-                        Content = "Error: Tool '" + (functionName ?? "(null)") + "' not found."
-                    });
-                }
-            }
+            ExecuteToolCalls(collectedToolCalls, onToolCall);
 
             StreamingLoop(onUpdate, onError, onToolCall, remainingIterations - 1, onReasoning, cancellationToken);
         }
@@ -838,28 +758,70 @@ namespace NetFrameworkAISDK.Common
         /// </summary>
         private static void MergeToolCall(List<ToolCallRequest> collected, ToolCallRequest delta)
         {
-            // 忽略无 Id 的工具调用块（流式结束标记或空块）
-            if (string.IsNullOrEmpty(delta.Id))
+            // 有 Id：按 Id 匹配已有条目（首个分片通常带有完整 Id）
+            if (!string.IsNullOrEmpty(delta.Id))
             {
+                foreach (var existing in collected)
+                {
+                    if (existing.Id == delta.Id)
+                    {
+                        MergeDelta(existing, delta);
+                        return;
+                    }
+                }
+                collected.Add(delta);
                 return;
             }
 
-            foreach (var existing in collected)
+            // 无 Id、有 Index：按 Index 匹配（后续参数分片通常只带 index 和 arguments）
+            if (delta.Index.HasValue)
             {
-                if (existing.Id == delta.Id)
+                foreach (var existing in collected)
                 {
-                    if (delta.FunctionName != null)
+                    if (existing.Index.HasValue && existing.Index.Value == delta.Index.Value)
                     {
-                        existing.FunctionName = delta.FunctionName;
+                        MergeDelta(existing, delta);
+                        return;
                     }
-                    if (delta.FunctionArguments != null)
-                    {
-                        existing.FunctionArguments = (existing.FunctionArguments ?? "") + delta.FunctionArguments;
-                    }
-                    return;
+                }
+                // 未找到匹配的 index 条目，但有参数数据，仍需保留
+                if (delta.FunctionArguments != null || delta.FunctionName != null)
+                {
+                    collected.Add(delta);
+                }
+                return;
+            }
+
+            // 既无 Id 也无 Index，但有函数参数：追加到最近一次添加的条目
+            if (delta.FunctionArguments != null && collected.Count > 0)
+            {
+                var last = collected[collected.Count - 1];
+                last.FunctionArguments = (last.FunctionArguments ?? "") + delta.FunctionArguments;
+                if (delta.FunctionName != null)
+                {
+                    last.FunctionName = delta.FunctionName;
                 }
             }
-            collected.Add(delta);
+        }
+
+        /// <summary>
+        /// 将 delta 的工具调用数据合并到已有条目
+        /// </summary>
+        private static void MergeDelta(ToolCallRequest existing, ToolCallRequest delta)
+        {
+            if (delta.FunctionName != null)
+            {
+                existing.FunctionName = delta.FunctionName;
+            }
+            if (delta.FunctionArguments != null)
+            {
+                existing.FunctionArguments = (existing.FunctionArguments ?? "") + delta.FunctionArguments;
+            }
+            // 如果 delta 带有 Id 但 existing 没有，补充 Id
+            if (!string.IsNullOrEmpty(delta.Id) && string.IsNullOrEmpty(existing.Id))
+            {
+                existing.Id = delta.Id;
+            }
         }
 
         /// <summary>
