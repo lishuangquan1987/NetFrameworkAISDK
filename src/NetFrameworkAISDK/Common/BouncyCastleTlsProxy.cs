@@ -1,9 +1,11 @@
 using System;
+using System.Collections;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using NetFrameworkAISDK.Common;
 using Org.BouncyCastle.Crypto.Tls;
 
 namespace NetFrameworkAISDK.Common
@@ -17,6 +19,8 @@ namespace NetFrameworkAISDK.Common
     {
         private static readonly object _lock = new object();
         private static BouncyCastleTlsProxy _instance;
+
+        private static readonly ILogger _logger = new FileLogger();
 
         private TcpListener _listener;
         private Thread _listenThread;
@@ -147,16 +151,17 @@ namespace NetFrameworkAISDK.Common
             {
                 // 服务器未发送 close_notify 就关闭连接，常见于某些反向代理，忽略
             }
-            catch (System.IO.IOException)
+            catch (System.IO.IOException ex)
             {
+                _logger.Log(string.Format("[TlsProxy] HandleClient IOException: {0} - {1}", ex.GetType().Name, ex.Message), "ERROR");
                 // 连接超时或重置，通常已被上层重试恢复
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine("[TlsProxy] HandleClient error: " + ex.GetType().Name + " - " + ex.Message);
+                _logger.Log(string.Format("[TlsProxy] HandleClient error: {0} - {1}", ex.GetType().Name, ex.Message), "ERROR");
                 if (ex.InnerException != null)
                 {
-                    Console.Error.WriteLine("[TlsProxy] Inner: " + ex.InnerException.GetType().Name + " - " + ex.InnerException.Message);
+                    _logger.Log(string.Format("[TlsProxy] Inner: {0} - {1}", ex.InnerException.GetType().Name, ex.InnerException.Message), "ERROR");
                 }
             }
         }
@@ -337,6 +342,19 @@ namespace NetFrameworkAISDK.Common
     {
         private readonly string _host;
 
+        /// <summary>
+        /// 现代 TLS 1.2 密码套件，ECDHE 优先。
+        /// </summary>
+        private static readonly int[] _cipherSuites = new int[]
+        {
+            CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+            CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+            CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+            CipherSuite.TLS_RSA_WITH_AES_128_GCM_SHA256,
+            CipherSuite.TLS_RSA_WITH_AES_256_GCM_SHA384
+        };
+
         public SimpleTlsClient(string host)
         {
             _host = host;
@@ -345,6 +363,30 @@ namespace NetFrameworkAISDK.Common
         public override ProtocolVersion MinimumVersion
         {
             get { return ProtocolVersion.TLSv12; }
+        }
+
+        public override int[] GetCipherSuites()
+        {
+            return _cipherSuites;
+        }
+
+        public override IDictionary GetClientExtensions()
+        {
+            // 手动构造 SNI (Server Name Indication) 扩展字节。
+            // TLS 格式: ExtensionType=0(2字节) | ListLength(2字节) | NameType=0(1字节) | NameLength(2字节) | Name(N字节)
+            // BC 1.8.9 的 ServerNameList/ServerName API 与后续版本不兼容，手动编码最可靠。
+            IDictionary extensions = new Hashtable();
+            byte[] nameBytes = Encoding.UTF8.GetBytes(_host);
+            int sniLen = 1 + 2 + nameBytes.Length;       // nameType(1) + nameLen(2) + name(N)
+            byte[] sniData = new byte[2 + sniLen];        // listLen(2) + sniEntry
+            sniData[0] = (byte)(sniLen >> 8);             // ServerNameList length (big-endian)
+            sniData[1] = (byte)sniLen;
+            sniData[2] = (byte)0;                         // NameType: 0 = host_name
+            sniData[3] = (byte)(nameBytes.Length >> 8);   // Name length (big-endian)
+            sniData[4] = (byte)nameBytes.Length;
+            Array.Copy(nameBytes, 0, sniData, 5, nameBytes.Length);
+            extensions.Add(0, sniData);                   // ExtensionType 0 = server_name
+            return extensions;
         }
 
         public override TlsAuthentication GetAuthentication()
@@ -360,6 +402,7 @@ namespace NetFrameworkAISDK.Common
     internal class SimpleTlsAuthentication : TlsAuthentication
     {
         private readonly string _host;
+        private static readonly ILogger _logger = new FileLogger();
 
         public SimpleTlsAuthentication(string host)
         {
@@ -381,7 +424,7 @@ namespace NetFrameworkAISDK.Common
                 DateTime now = DateTime.UtcNow;
                 if (now < cert.StartDate.ToDateTime() || now > cert.EndDate.ToDateTime())
                 {
-                    Console.Error.WriteLine("[TlsProxy] Certificate expired or not yet valid for " + _host);
+                    _logger.Log(string.Format("[TlsProxy] Certificate expired or not yet valid for {0}", _host), "WARN");
                 }
 
                 // 验证主机名（CN 或 SAN）
@@ -401,13 +444,13 @@ namespace NetFrameworkAISDK.Common
                     }
                     if (!hostMatch)
                     {
-                        Console.Error.WriteLine("[TlsProxy] Hostname mismatch: cert CN=" + (cn ?? "?") + " expected=" + _host);
+                        _logger.Log(string.Format("[TlsProxy] Hostname mismatch: cert CN={0} expected={1}", cn ?? "?", _host), "WARN");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine("[TlsProxy] Certificate validation error: " + ex.Message);
+                _logger.Log(string.Format("[TlsProxy] Certificate validation error: {0}", ex.Message), "ERROR");
             }
         }
 

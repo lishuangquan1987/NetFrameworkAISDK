@@ -47,7 +47,7 @@ namespace NetFrameworkAISDK.Common
         {
             _timeoutMilliseconds = timeoutMilliseconds;
             _sendLock = new object();
-            _logger = logger ?? new ConsoleLogger();
+            _logger = logger ?? new FileLogger();
         }
 
         /// <summary>是否已连接到 MCP 服务器</summary>

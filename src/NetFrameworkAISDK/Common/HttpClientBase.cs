@@ -57,7 +57,7 @@ namespace NetFrameworkAISDK.Common
         private readonly int RetryDelayMilliseconds;
 
         /// <summary>默认日志记录器（静态初始化及回退使用）</summary>
-        private static readonly ILogger _defaultLogger = new ConsoleLogger();
+        private static readonly ILogger _defaultLogger = new FileLogger();
 
         /// <summary>TLS 1.2 是否被 OS 支持</summary>
         private static bool _tls12Supported;
@@ -65,6 +65,18 @@ namespace NetFrameworkAISDK.Common
         private static bool _proxyEnabled;
         /// <summary>代理监听端口</summary>
         private static int _proxyPort;
+
+        /// <summary>
+        /// TLS 诊断信息（仅供日志/诊断使用）
+        /// </summary>
+        public static string TlsDiagnostics
+        {
+            get
+            {
+                return string.Format("Tls12Supported={0}, ProxyEnabled={1}, ProxyPort={2}",
+                    _tls12Supported, _proxyEnabled, _proxyPort);
+            }
+        }
 
         static HttpClientBase()
         {
@@ -486,6 +498,7 @@ namespace NetFrameworkAISDK.Common
         protected void PostStream<T>(string endpoint, object data, Action<T> onData, Action<ApiError> onError, CancellationToken? cancellationToken = null)
         {
             string url = BuildUrl(endpoint);
+            _logger.Log(string.Format("HTTP POST {0} (stream)", url), "DEBUG");
             string json = JsonHelper.Serialize(data);
             byte[] bytes = Encoding.UTF8.GetBytes(json);
 

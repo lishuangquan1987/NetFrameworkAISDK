@@ -14,7 +14,7 @@ namespace NetFrameworkAISDK.Common
     /// </summary>
     public static class AgentTools
     {
-        private static readonly ILogger _logger = new ConsoleLogger();
+        private static readonly ILogger _logger = new FileLogger();
 
         /// <summary>
         /// 允许访问的根目录路径。设置后，所有文件操作都将限制在此目录及其子目录内。

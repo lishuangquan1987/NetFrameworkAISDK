@@ -62,7 +62,7 @@ namespace NetFrameworkAISDK.Common
         /// <param name="instructions">系统指令/提示词</param>
         /// <param name="tools">可用的工具函数列表</param>
         public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools = null)
-            : this(client, model, instructions, tools, false, (string[])null)
+            : this(client, model, instructions, tools, false, (string[])null, null)
         {
         }
 
@@ -76,12 +76,12 @@ namespace NetFrameworkAISDK.Common
         /// <param name="tools">用户自定义工具函数列表</param>
         /// <param name="includeDefaultTools">是否自动包含 AgentTools.CreateDefaultTools() 的默认工具</param>
         /// <param name="skillsDirectories">Skills 目录路径数组（优先级从低到高），传入后自动发现并集成渐进式披露</param>
-        public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools, bool includeDefaultTools, string[] skillsDirectories)
+        public AIAgent(IAIClient client, string model, string instructions, IEnumerable<AIFunction> tools, bool includeDefaultTools, string[] skillsDirectories, ILogger logger = null)
         {
             _client = client;
             _baseInstructions = instructions;
             _skillManager = new SkillManager(skillsDirectories ?? new string[0]);
-            _logger = new ConsoleLogger();
+            _logger = logger ?? new FileLogger();
 
             _options = new ConversationOptions
             {
@@ -431,17 +431,21 @@ namespace NetFrameworkAISDK.Common
         {
             if (remainingIterations <= 0)
             {
-                if (_conversationHistory.Count > 0)
+                // 从后往前找最后一条 assistant 文本回复，避免返回工具执行结果
+                for (int i = _conversationHistory.Count - 1; i >= 0; i--)
                 {
-                    var lastMsg = _conversationHistory[_conversationHistory.Count - 1];
-                    return new ApiResponse<string>
+                    var msg = _conversationHistory[i];
+                    if (msg.Role == MessageRole.Assistant && !string.IsNullOrEmpty(msg.Content))
                     {
-                        Result = lastMsg.Content != null ? lastMsg.Content : ""
-                    };
+                        return new ApiResponse<string>
+                        {
+                            Result = msg.Content
+                        };
+                    }
                 }
                 return new ApiResponse<string>
                 {
-                    Error = new ApiError("Agent loop exceeded max iterations with empty history.")
+                    Error = new ApiError("Agent loop exceeded max iterations without a valid response.")
                 };
             }
 
@@ -452,11 +456,19 @@ namespace NetFrameworkAISDK.Common
                 return new ApiResponse<string> { Error = new ApiError("Request cancelled") };
             }
 
-            var response = _client.SendConversation(_conversationHistory, _options, cancellationToken);
-
-            if (!response.IsSuccess)
+            ApiResponse<ConversationResponse> response;
+            try
             {
-                return new ApiResponse<string> { Error = response.Error };
+                response = _client.SendConversation(_conversationHistory, _options, cancellationToken);
+
+                if (!response.IsSuccess)
+                {
+                    return new ApiResponse<string> { Error = response.Error };
+                }
+            }
+            catch (Exception ex)
+            {
+                return new ApiResponse<string> { Error = new ApiError("Agent loop API call failed: " + ex.Message) };
             }
 
             var result = response.Result;
@@ -505,7 +517,7 @@ namespace NetFrameworkAISDK.Common
                 };
             }
 
-            ExecuteToolCalls(result.ToolCalls, onToolCall);
+            ExecuteToolCalls(result.ToolCalls, onToolCall, cancellationToken);
 
             return AgentLoop(onToolCall, remainingIterations - 1, onReasoning, cancellationToken);
         }
@@ -568,16 +580,18 @@ namespace NetFrameworkAISDK.Common
         {
             if (remainingIterations <= 0)
             {
-                // 与 AgentLoop 保持一致：返回最后内容，不抛错误
-                if (_conversationHistory.Count > 0)
+                // 从后往前找最后一条 assistant 文本回复，避免返回工具执行结果
+                for (int i = _conversationHistory.Count - 1; i >= 0; i--)
                 {
-                    var lastMsg = _conversationHistory[_conversationHistory.Count - 1];
-                    if (!string.IsNullOrEmpty(lastMsg.Content))
+                    var msg = _conversationHistory[i];
+                    if (msg.Role == MessageRole.Assistant && !string.IsNullOrEmpty(msg.Content))
                     {
-                        onUpdate(lastMsg.Content);
+                        onUpdate(msg.Content);
+                        _logger.Log("Agent loop exceeded maximum iterations, returning last assistant content", "WARN");
+                        return;
                     }
                 }
-                _logger.Log("Agent loop exceeded maximum iterations, returning last content", "WARN");
+                _logger.Log("Agent loop exceeded maximum iterations, no assistant content found", "WARN");
                 return;
             }
 
@@ -586,7 +600,16 @@ namespace NetFrameworkAISDK.Common
             var collectedToolCalls = new List<ToolCallRequest>();
             bool hasError = false;
 
-            _options.SystemPrompt = BuildSystemPrompt();
+            try
+            {
+                _options.SystemPrompt = BuildSystemPrompt();
+            }
+            catch (Exception ex)
+            {
+                _logger.Log("Failed to build system prompt: " + ex.Message, "ERROR");
+                onError(new ApiError("System prompt build failed: " + ex.Message));
+                return;
+            }
 
             // 检查取消
             if (cancellationToken.HasValue && cancellationToken.Value.IsCancellationRequested)
@@ -595,41 +618,51 @@ namespace NetFrameworkAISDK.Common
                 return;
             }
 
-            _client.SendConversationStreaming(
-                _conversationHistory,
-                _options,
-                new Action<ConversationResponse>(chunk =>
-                {
-                    if (!string.IsNullOrEmpty(chunk.ReasoningContent))
+            try
+            {
+                _client.SendConversationStreaming(
+                    _conversationHistory,
+                    _options,
+                    new Action<ConversationResponse>(chunk =>
                     {
-                        fullReasoning += chunk.ReasoningContent;
-                        if (onReasoning != null) onReasoning(chunk.ReasoningContent);
-                    }
-
-                    if (!string.IsNullOrEmpty(chunk.Content))
-                    {
-                        fullResponse += chunk.Content;
-                        onUpdate(chunk.Content);
-                    }
-
-                    if (chunk.ToolCalls != null && chunk.ToolCalls.Count > 0)
-                    {
-                        foreach (var tc in chunk.ToolCalls)
+                        if (!string.IsNullOrEmpty(chunk.ReasoningContent))
                         {
-                            MergeToolCall(collectedToolCalls, tc);
+                            fullReasoning += chunk.ReasoningContent;
+                            if (onReasoning != null) onReasoning(chunk.ReasoningContent);
                         }
-                    }
-                }),
-                new Action<ApiError>(error =>
-                {
-                    hasError = true;
-                    onError(error);
-                }),
-                cancellationToken
-            );
+
+                        if (!string.IsNullOrEmpty(chunk.Content))
+                        {
+                            fullResponse += chunk.Content;
+                            onUpdate(chunk.Content);
+                        }
+
+                        if (chunk.ToolCalls != null && chunk.ToolCalls.Count > 0)
+                        {
+                            foreach (var tc in chunk.ToolCalls)
+                            {
+                                MergeToolCall(collectedToolCalls, tc);
+                            }
+                        }
+                    }),
+                    new Action<ApiError>(error =>
+                    {
+                        hasError = true;
+                        onError(error);
+                    }),
+                    cancellationToken
+                );
+            }
+            catch (Exception ex)
+            {
+                hasError = true;
+                onError(new ApiError("Streaming API call failed: " + ex.Message));
+            }
 
             if (hasError)
             {
+                // 流式出错，回滚最后一条用户消息避免历史中出现孤立的 User 消息
+                RemoveLastUserMessage();
                 return;
             }
 
@@ -659,19 +692,39 @@ namespace NetFrameworkAISDK.Common
                 return;
             }
 
-            ExecuteToolCalls(collectedToolCalls, onToolCall);
+            try
+            {
+                ExecuteToolCalls(collectedToolCalls, onToolCall, cancellationToken);
 
-            StreamingLoop(onUpdate, onError, onToolCall, remainingIterations - 1, onReasoning, cancellationToken);
+                StreamingLoop(onUpdate, onError, onToolCall, remainingIterations - 1, onReasoning, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.Log("StreamingLoop iteration failed: " + ex.Message, "ERROR");
+                onError(new ApiError("StreamingLoop iteration failed: " + ex.Message));
+            }
         }
 
         /// <summary>
         /// 执行工具调用列表中的所有工具，并将结果添加到对话历史。
         /// 如果工具标记了 RequiresApproval 且设置了 ToolApprovalCallback，会先回调审批。
         /// </summary>
-        private void ExecuteToolCalls(List<ToolCallRequest> toolCalls, Action<ToolCallEventArgs> onToolCall)
+        private void ExecuteToolCalls(List<ToolCallRequest> toolCalls, Action<ToolCallEventArgs> onToolCall, CancellationToken? cancellationToken = null)
         {
             foreach (var toolCall in toolCalls)
             {
+                // 每次工具调用前检查取消
+                if (cancellationToken.HasValue && cancellationToken.Value.IsCancellationRequested)
+                {
+                    AddToHistory(new ConversationMessage
+                    {
+                        Role = MessageRole.Tool,
+                        Name = !string.IsNullOrEmpty(toolCall.FunctionName) ? toolCall.FunctionName : "unknown",
+                        ToolCallId = toolCall.Id,
+                        Content = "[CANCELLED]"
+                    });
+                    continue;
+                }
                 string functionName = toolCall.FunctionName;
                 string functionArgs = !string.IsNullOrEmpty(toolCall.FunctionArguments) ? toolCall.FunctionArguments : "{}";
 
@@ -719,7 +772,15 @@ namespace NetFrameworkAISDK.Common
                         }
                     }
 
-                    var result = function.Execute(functionArgs);
+                    string result;
+                    try
+                    {
+                        result = function.Execute(functionArgs);
+                    }
+                    catch (Exception ex)
+                    {
+                        result = "[ERROR] Tool execution failed: " + ex.Message;
+                    }
                     AddToHistory(new ConversationMessage
                     {
                         Role = MessageRole.Tool,
@@ -792,14 +853,26 @@ namespace NetFrameworkAISDK.Common
                 return;
             }
 
-            // 既无 Id 也无 Index，但有函数参数：追加到最近一次添加的条目
-            if (delta.FunctionArguments != null && collected.Count > 0)
+            // 既无 Id 也无 Index，但有函数参数
+            if (delta.FunctionArguments != null)
             {
-                var last = collected[collected.Count - 1];
-                last.FunctionArguments = (last.FunctionArguments ?? "") + delta.FunctionArguments;
-                if (delta.FunctionName != null)
+                if (collected.Count > 0)
                 {
-                    last.FunctionName = delta.FunctionName;
+                    var last = collected[collected.Count - 1];
+                    last.FunctionArguments = (last.FunctionArguments ?? "") + delta.FunctionArguments;
+                    if (delta.FunctionName != null)
+                    {
+                        last.FunctionName = delta.FunctionName;
+                    }
+                }
+                else
+                {
+                    // 第一个分片无 Id 无 Index，创建新条目避免数据丢失
+                    collected.Add(new ToolCallRequest
+                    {
+                        FunctionName = delta.FunctionName,
+                        FunctionArguments = delta.FunctionArguments
+                    });
                 }
             }
         }
@@ -894,6 +967,24 @@ namespace NetFrameworkAISDK.Common
                 Content = userMessage,
                 ContentParts = contentParts
             });
+        }
+
+        /// <summary>
+        /// 回滚最后一条用户消息（流式出错时清理历史）
+        /// </summary>
+        private void RemoveLastUserMessage()
+        {
+            lock (_historyLock)
+            {
+                if (_conversationHistory.Count > 0)
+                {
+                    var last = _conversationHistory[_conversationHistory.Count - 1];
+                    if (last.Role == MessageRole.User)
+                    {
+                        _conversationHistory.RemoveAt(_conversationHistory.Count - 1);
+                    }
+                }
+            }
         }
 
         /// <summary>
