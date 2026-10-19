@@ -57,14 +57,29 @@ jobs:
           $trigger = "${{ github.event_name }}"
           if ($trigger -eq "release")
           {
-            $tag = "${{ github.event.release.tag_name }}"
-            $version = $tag -replace '^v', ''
+            $raw = "${{ github.event.release.tag_name }}"
           }
           else
           {
-            $version = "${{ github.event.inputs.version }}"
+            $raw = "${{ github.event.inputs.version }}"
           }
-          echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+
+          # Tags look like 'v0.1.6', and manual runs may type the same, so strip
+          # the prefix to get a valid NuGet version.
+          #
+          # The variable must NOT be called VERSION: MSBuild imports environment
+          # variables as build properties, so VERSION would override the
+          # project's Version property and restore dies with
+          # "'v0.1.6' is not a valid version string" (surfacing as the opaque
+          # MSB4181 "RestoreTask returned false but did not log an error").
+          $version = $raw.Trim() -replace '^[vV]', ''
+          if ($version -notmatch '^\d+(\.\d+){2,3}(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$')
+          {
+            Write-Host "::error::Invalid version '$raw'. Provide a version like 1.2.3 or v1.2.3."
+            exit 1
+          }
+
+          "PACKAGE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
           Write-Host "Extracted version: $version"
 
       # -bl writes a binary log: MSB4181 ("RestoreTask returned false but did not
@@ -86,13 +101,13 @@ jobs:
       - name: Create NuGet package
         run: |
           nuget pack src\NetFrameworkAISDK\NetFrameworkAISDK.nuspec `
-            -Version $env:VERSION `
+            -Version $env:PACKAGE_VERSION `
             -Properties Configuration=Release `
             -OutputDirectory .\nupkg
 
       - name: Push package to NuGet.org
         run: |
-          nuget push .\nupkg\NetFrameworkAISDK.$env:VERSION.nupkg `
+          nuget push .\nupkg\NetFrameworkAISDK.$env:PACKAGE_VERSION.nupkg `
             -Source https://api.nuget.org/v3/index.json `
             -ApiKey ${{ secrets.NUGET_API_KEY }}
 
