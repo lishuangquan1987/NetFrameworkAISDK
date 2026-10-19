@@ -10,6 +10,11 @@ on:
         required: true
         type: string
 
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
 jobs:
   build-and-publish:
     runs-on: windows-latest
@@ -18,10 +23,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # The SDK version comes from global.json so CI and local builds use the same
+      # toolchain. Without a global.json the runner silently picks the newest SDK
+      # on the image (it used 10.0.401 when Restore broke), so image updates could
+      # change the compiler/restore stack under us without any repo change.
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.x"
+          global-json-file: global.json
+
+      - name: Show toolchain
+        shell: pwsh
+        run: |
+          dotnet --version
+          dotnet --list-sdks
+          dotnet nuget list source
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.nuspec', 'global.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       - name: Setup NuGet
         uses: NuGet/setup-nuget@v2
@@ -43,11 +67,21 @@ jobs:
           echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
           Write-Host "Extracted version: $version"
 
+      # -bl writes a binary log: MSB4181 ("RestoreTask returned false but did not
+      # log an error") means NuGet swallowed the real error, and the binlog keeps
+      # the full detail for the diagnostics artifact.
       - name: Restore
-        run: dotnet restore src/NetFrameworkAISDK/NetFrameworkAISDK.csproj
+        shell: pwsh
+        run: |
+          dotnet restore src/NetFrameworkAISDK/NetFrameworkAISDK.csproj --verbosity normal -bl:restore.binlog
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::Restore failed; retrying once (possible transient feed/network failure)"
+            dotnet restore src/NetFrameworkAISDK/NetFrameworkAISDK.csproj --verbosity normal -bl:restore-retry.binlog
+            exit $LASTEXITCODE
+          }
 
       - name: Build (net40 + netstandard2.0)
-        run: dotnet build src/NetFrameworkAISDK/NetFrameworkAISDK.csproj -c Release --no-restore
+        run: dotnet build src/NetFrameworkAISDK/NetFrameworkAISDK.csproj -c Release --no-restore -bl:build.binlog
 
       - name: Create NuGet package
         run: |
@@ -61,3 +95,14 @@ jobs:
           nuget push .\nupkg\NetFrameworkAISDK.$env:VERSION.nupkg `
             -Source https://api.nuget.org/v3/index.json `
             -ApiKey ${{ secrets.NUGET_API_KEY }}
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msbuild-diagnostics
+          path: |
+            restore.binlog
+            restore-retry.binlog
+            build.binlog
+          if-no-files-found: ignore

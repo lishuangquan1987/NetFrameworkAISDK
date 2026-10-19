@@ -13,6 +13,9 @@ src/NetFrameworkAISDK/bin/
 
 # Build output
 obj/
+bin/
+nupkg/
+*.binlog
 
 # Tools
 nuget.exe
@@ -23,3 +26,5 @@ Function_Call_Sample/bin/
 StructedOutput_Samples/bin/
 Skills_Sample/bin/
 MCP_Samples/bin/
+.reasonix/
+.codegraph/
